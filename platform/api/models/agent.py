@@ -34,8 +34,8 @@ class Agent(Base):
 
 
 # ─── LLM Provider definitions ───
-# NOTE: Bedrock / bedrock-irsa removed — Bedrock is NOT available in AWS China regions.
-# Users must bring their own API keys (OpenAI, Anthropic, or compatible).
+# NOTE: bedrock-irsa removed — IRSA is not available in AWS China regions.
+# Bedrock (AKSK) kept — users can call Bedrock in global regions using their own keys.
 
 LLM_PROVIDERS = {
     "openai": {
@@ -48,7 +48,7 @@ LLM_PROVIDERS = {
             {"id": "gpt-4o-mini", "name": "GPT-4o Mini"},
             {"id": "o3-mini", "name": "o3-mini"},
         ],
-        "config_builder": lambda model: {},  # OpenAI auto-configured via env var
+        "config_builder": lambda model: {},
     },
     "anthropic": {
         "name": "Anthropic",
@@ -60,7 +60,22 @@ LLM_PROVIDERS = {
             {"id": "claude-sonnet-4-20250514", "name": "Claude Sonnet 4"},
             {"id": "claude-opus-4-6", "name": "Claude Opus 4"},
         ],
-        "config_builder": lambda model: {},  # Anthropic auto-configured via env var
+        "config_builder": lambda model: {},
+    },
+    "bedrock": {
+        "name": "AWS Bedrock (AKSK)",
+        "env_keys": ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"],
+        "optional_keys": ["AWS_DEFAULT_REGION"],
+        "default_model": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+        "models": [
+            {"id": "us.anthropic.claude-sonnet-4-5-20250929-v1:0", "name": "Claude Sonnet 4.5 (Bedrock)"},
+            {"id": "us.anthropic.claude-sonnet-4-20250514-v1:0", "name": "Claude Sonnet 4 (Bedrock)"},
+            {"id": "us.anthropic.claude-opus-4-6-v1:0", "name": "Claude Opus 4 (Bedrock)"},
+            {"id": "us.meta.llama3-3-70b-instruct-v1:0", "name": "Llama 3.3 70B (Bedrock)"},
+        ],
+        "config_builder": lambda model: {
+            "models": {"providers": [{"id": "bedrock", "name": "bedrock"}]},
+        },
     },
     "openai-compatible": {
         "name": "OpenAI Compatible (Custom Endpoint)",
@@ -70,7 +85,7 @@ LLM_PROVIDERS = {
         "models": [
             {"id": "gpt-4o", "name": "GPT-4o (or custom)"},
         ],
-        "config_builder": lambda model: {},  # Configured via OPENAI_BASE_URL env var
+        "config_builder": lambda model: {},
     },
 }
 
@@ -80,7 +95,7 @@ class AgentCreate(BaseModel):
     """Agent creation schema"""
 
     name: str = Field(..., min_length=3, max_length=63, pattern="^[a-z0-9-]+$")
-    llm_provider: str = Field(default="openai", description="LLM provider: openai, anthropic, openai-compatible")
+    llm_provider: str = Field(default="openai", description="LLM provider: openai, anthropic, bedrock, openai-compatible")
     llm_model: Optional[str] = Field(default=None, description="Model ID (uses provider default if not specified)")
     llm_api_keys: Optional[Dict[str, str]] = Field(default=None, description="API keys for the LLM provider")
     config: Optional[Dict[str, Any]] = Field(default_factory=dict)
