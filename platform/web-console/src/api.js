@@ -59,6 +59,7 @@ class ApiClient {
 
   // Tenants
   listTenants() { return this.request('/api/v1/tenants') }
+  getTenant(tenant) { return this.request(`/api/v1/tenants/${tenant}`) }
   createTenant(name) {
     return this.request('/api/v1/tenants', { method: 'POST', body: JSON.stringify({ name }) })
   }

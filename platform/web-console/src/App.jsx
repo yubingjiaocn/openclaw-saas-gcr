@@ -255,15 +255,20 @@ function DashboardPage() {
 function TenantPage() {
   const [agents, setAgents] = useState([])
   const [members, setMembers] = useState([])
-  const [newAgent, setNewAgent] = useState('')
+  const [myRole, setMyRole] = useState(null) // owner | admin | member
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [loading, setLoading] = useState(true)
-  const [channelModal, setChannelModal] = useState(null) // { agentId, agentName }
+  const [channelModal, setChannelModal] = useState(null)
   const [createModal, setCreateModal] = useState(false)
-  const [logsModal, setLogsModal] = useState(null) // { agentId, agentName }
+  const [logsModal, setLogsModal] = useState(null)
   const tenantName = window.location.pathname.split('/tenants/')[1]?.split('/')[0]
   const navigate = useNavigate()
+  const isAdmin = api.isPlatformAdmin()
+
+  // Role helpers
+  const isOwnerOrAdmin = isAdmin || myRole === 'owner' || myRole === 'admin'
+  const isOwner = isAdmin || myRole === 'owner'
 
   const loadAgents = () => {
     api.listAgents(tenantName).then(setAgents).catch(e => setError(e.message)).finally(() => setLoading(false))
@@ -271,7 +276,11 @@ function TenantPage() {
   const loadMembers = () => {
     api.getMembers(tenantName).then(setMembers).catch(() => {})
   }
-  useState(() => { loadAgents(); loadMembers() }, [])
+  useState(() => {
+    loadAgents()
+    loadMembers()
+    api.getTenant(tenantName).then(t => setMyRole(t.role)).catch(() => {})
+  }, [])
 
   const deleteAgent = async (id) => {
     if (!confirm('Delete this agent? This will stop the pod.')) return
@@ -292,13 +301,15 @@ function TenantPage() {
   return (
     <div className="container">
       <div className="page-header">
-        <h1>Tenant: {tenantName}</h1>
+        <h1>Tenant: {tenantName} {myRole && <span className={`badge ${myRole === 'owner' ? 'badge-purple' : myRole === 'admin' ? 'badge-green' : 'badge-blue'}`} style={{fontSize:'12px',verticalAlign:'middle'}}>{myRole}</span>}</h1>
         <p>
           <Link to="/">← Back to Dashboard</Link>
           {' · '}
           <Link to={`/tenants/${tenantName}/billing`}>📊 Billing & Usage</Link>
-          {' · '}
-          <button className="btn btn-sm btn-danger" onClick={deleteTenant} style={{verticalAlign:'middle'}}>🗑 Delete Tenant</button>
+          {isOwner && <>
+            {' · '}
+            <button className="btn btn-sm btn-danger" onClick={deleteTenant} style={{verticalAlign:'middle'}}>🗑 Delete Tenant</button>
+          </>}
         </p>
       </div>
 
@@ -308,7 +319,7 @@ function TenantPage() {
       <div className="card">
         <div className="card-header">
           <span className="card-title">Agents</span>
-          <button className="btn btn-primary btn-sm" onClick={() => setCreateModal(true)}>+ Create Agent</button>
+          {myRole && <button className="btn btn-primary btn-sm" onClick={() => setCreateModal(true)}>+ Create Agent</button>}
         </div>
         {loading ? <p>Loading...</p> : agents.length === 0 ? (
           <div className="empty"><div className="empty-icon">🤖</div><p>No agents yet. Click "Create Agent" above.</p></div>
@@ -325,15 +336,15 @@ function TenantPage() {
             </div>
             <div style={{display:'flex', gap:'6px'}}>
               <button className="btn btn-sm" onClick={() => setLogsModal({agentId: a.id, agentName: a.name})}>📋 Logs</button>
-              <button className="btn btn-sm" onClick={() => setChannelModal({agentId: a.id, agentName: a.name})}>+ Channel</button>
-              <button className="btn btn-sm btn-danger" onClick={() => deleteAgent(a.id)}>Delete</button>
+              {myRole && <button className="btn btn-sm" onClick={() => setChannelModal({agentId: a.id, agentName: a.name})}>+ Channel</button>}
+              {myRole && <button className="btn btn-sm btn-danger" onClick={() => deleteAgent(a.id)}>Delete</button>}
             </div>
           </div>
         ))}
       </div>
 
-      {/* Allowed Emails */}
-      <AllowedEmailsCard tenantName={tenantName} />
+      {/* Allowed Emails — admin+ only */}
+      {isOwnerOrAdmin && <AllowedEmailsCard tenantName={tenantName} />}
 
       {/* Members */}
       <div className="card" style={{ marginTop: '16px' }}>
@@ -351,7 +362,7 @@ function TenantPage() {
                 <span>{m.display_name || '—'}</span>
                 <span className={`badge ${m.role === 'owner' ? 'badge-blue' : m.role === 'admin' ? 'badge-green' : ''}`}>{m.role}</span>
                 <span style={{fontSize:'12px', color:'var(--text-secondary)'}}>{new Date(m.joined_at).toLocaleDateString()}</span>
-                <span>{m.role !== 'owner' && <button className="btn btn-sm btn-danger" onClick={async () => {
+                <span>{m.role !== 'owner' && isOwnerOrAdmin && <button className="btn btn-sm btn-danger" onClick={async () => {
                   if (!confirm(`Remove ${m.email} from this tenant?`)) return
                   try { await api.removeMember(tenantName, m.user_id); loadMembers() } catch (err) { setError(err.message) }
                 }}>Remove</button>}</span>
@@ -541,6 +552,7 @@ function CreateAgentModal({ tenantName, onClose, onSuccess, onError }) {
               ))}
             </div>
           )}
+
 
           <div className="modal-actions">
             <button type="button" className="btn" onClick={onClose}>Cancel</button>

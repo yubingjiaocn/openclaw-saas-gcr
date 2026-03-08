@@ -114,6 +114,19 @@ async def list_tenants(
     return result
 
 
+@router.get("/{tenant_name}", response_model=TenantResponse)
+async def get_tenant(
+    tenant_name: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get tenant details including the current user's role"""
+    tenant, role = await get_user_tenant(tenant_name, current_user, db)
+    resp = TenantResponse.model_validate(tenant)
+    resp.role = role
+    return resp
+
+
 @router.post("", response_model=TenantResponse, status_code=status.HTTP_201_CREATED)
 async def create_tenant(
     tenant_data: TenantCreate,
