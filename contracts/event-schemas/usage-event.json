@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "UsageEvent",
+  "description": "Metrics Exporter Sidecar → SQS → Billing Service",
+  "type": "object",
+  "required": ["tenant", "agent", "model", "input_tokens", "output_tokens", "timestamp"],
+  "properties": {
+    "tenant": { "type": "string", "description": "租户名" },
+    "agent": { "type": "string", "description": "Agent 名" },
+    "model": { "type": "string", "description": "LLM 模型" },
+    "provider": { "type": "string", "description": "Provider" },
+    "input_tokens": { "type": "integer", "minimum": 0 },
+    "output_tokens": { "type": "integer", "minimum": 0 },
+    "session_id": { "type": "string" },
+    "timestamp": { "type": "string", "format": "date-time" }
+  }
+}

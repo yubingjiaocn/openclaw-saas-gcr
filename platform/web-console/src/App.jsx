@@ -1,0 +1,828 @@
+import { useState, useEffect } from 'react'
+import { Routes, Route, Navigate, Link, useNavigate, useParams } from 'react-router-dom'
+import { api } from './api'
+import './styles.css'
+
+// ─── Auth Context ───
+function useAuth() {
+  const [, setTick] = useState(0)
+  return {
+    isLoggedIn: api.isLoggedIn(),
+    logout: () => { api.setToken(null); api.setUser(null); setTick(t => t + 1) },
+    refresh: () => setTick(t => t + 1),
+  }
+}
+
+// ─── Navbar ───
+function Navbar({ auth }) {
+  return (
+    <nav className="navbar">
+      <Link to="/" className="navbar-brand">🦐 OpenClaw SaaS</Link>
+      <div className="navbar-right">
+        {auth.isLoggedIn && (
+          <>
+            {api.isPlatformAdmin() && <span className="badge badge-purple" style={{fontSize:'11px'}}>Platform Admin</span>}
+            <Link to="/">Dashboard</Link>
+            <button className="btn btn-sm" onClick={auth.logout}>Logout</button>
+          </>
+        )}
+      </div>
+    </nav>
+  )
+}
+
+// ─── Login Page ───
+function LoginPage({ onLogin }) {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const navigate = useNavigate()
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setError('')
+    try {
+      const res = await api.login(email, password)
+      api.setToken(res.access_token)
+      api.setUser(res.user)
+      onLogin()
+      navigate('/')
+    } catch (err) { setError(err.message) }
+  }
+
+  return (
+    <div className="auth-page">
+      <div className="auth-box">
+        <h1>🦐 OpenClaw SaaS</h1>
+        <p>Sign in to manage your agents</p>
+        <div className="card">
+          {error && <div className="alert alert-error">{error}</div>}
+          <form onSubmit={handleSubmit}>
+            <div className="form-group">
+              <label>Email</label>
+              <input className="form-input" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
+            </div>
+            <div className="form-group">
+              <label>Password</label>
+              <input className="form-input" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
+            </div>
+            <button className="btn btn-primary" style={{width:'100%'}}>Sign In</button>
+          </form>
+          <p style={{textAlign:'center', marginTop:'16px', fontSize:'14px'}}>
+            Don't have an account? <Link to="/signup">Sign Up</Link>
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Signup Page ───
+function SignupPage({ onLogin }) {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [name, setName] = useState('')
+  const [error, setError] = useState('')
+  const navigate = useNavigate()
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setError('')
+    try {
+      await api.signup(email, password, name)
+      const res = await api.login(email, password)
+      api.setToken(res.access_token)
+      api.setUser(res.user)
+      onLogin()
+      navigate('/')
+    } catch (err) { setError(err.message) }
+  }
+
+  return (
+    <div className="auth-page">
+      <div className="auth-box">
+        <h1>🦐 Create Account</h1>
+        <p>Start deploying AI agents</p>
+        <div className="card">
+          {error && <div className="alert alert-error">{error}</div>}
+          <form onSubmit={handleSubmit}>
+            <div className="form-group">
+              <label>Display Name</label>
+              <input className="form-input" value={name} onChange={e => setName(e.target.value)} placeholder="Your name" />
+            </div>
+            <div className="form-group">
+              <label>Email</label>
+              <input className="form-input" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
+            </div>
+            <div className="form-group">
+              <label>Password</label>
+              <input className="form-input" type="password" value={password} onChange={e => setPassword(e.target.value)} required minLength={8} />
+            </div>
+            <button className="btn btn-primary" style={{width:'100%'}}>Create Account</button>
+          </form>
+          <p style={{textAlign:'center', marginTop:'16px', fontSize:'14px'}}>
+            Already have an account? <Link to="/login">Sign In</Link>
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Dashboard Page ───
+function DashboardPage() {
+  const [tenants, setTenants] = useState([])
+  const [newName, setNewName] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [adminStats, setAdminStats] = useState(null)
+  const navigate = useNavigate()
+  const isAdmin = api.isPlatformAdmin()
+
+  useState(() => {
+    api.listTenants().then(setTenants).catch(e => setError(e.message)).finally(() => setLoading(false))
+    if (isAdmin) {
+      api.getAdminOverview().then(setAdminStats).catch(() => {})
+    }
+  }, [])
+
+  const createTenant = async (e) => {
+    e.preventDefault()
+    if (!newName.trim()) return
+    setError('')
+    try {
+      const t = await api.createTenant(newName.trim())
+      setTenants([...tenants, t])
+      setNewName('')
+    } catch (err) { setError(err.message) }
+  }
+
+  return (
+    <div className="container">
+      <div className="page-header">
+        <h1>{isAdmin ? '🛡️ Platform Admin Dashboard' : 'Dashboard'}</h1>
+        <p>{isAdmin ? 'Manage all tenants and monitor platform usage' : 'Manage your tenants and agents'}</p>
+      </div>
+
+      {error && <div className="alert alert-error">{error}</div>}
+
+      {/* Platform Admin Overview */}
+      {isAdmin && adminStats && (
+        <div className="card" style={{ marginBottom: '16px' }}>
+          <div className="card-header">
+            <span className="card-title">📊 Platform Overview (This Month)</span>
+          </div>
+          <div className="billing-stats">
+            <div className="stat-box">
+              <div className="stat-label">Tenants</div>
+              <div className="stat-value">{adminStats.total_tenants}</div>
+            </div>
+            <div className="stat-box">
+              <div className="stat-label">Agents</div>
+              <div className="stat-value">{adminStats.total_agents}</div>
+            </div>
+            <div className="stat-box">
+              <div className="stat-label">Users</div>
+              <div className="stat-value">{adminStats.total_users}</div>
+            </div>
+            <div className="stat-box">
+              <div className="stat-label">Total Cost</div>
+              <div className="stat-value">${adminStats.current_month?.estimated_cost?.toFixed(4) ?? '0'}</div>
+            </div>
+          </div>
+          {adminStats.tenants?.length > 0 && (
+            <div className="usage-table" style={{ marginTop: '12px' }}>
+              <div className="usage-row usage-header">
+                <span>Tenant</span><span>Plan</span><span>Agents</span><span>Tokens</span><span>Cost</span>
+              </div>
+              {adminStats.tenants.map(t => (
+                <div key={t.name} className="usage-row">
+                  <span><Link to={`/tenants/${t.name}`} style={{ color: 'var(--text-link)' }}>{t.name}</Link></span>
+                  <span><span className="badge badge-blue">{t.plan}</span></span>
+                  <span>{t.agent_count}</span>
+                  <span>{t.tokens_used >= 1000 ? (t.tokens_used / 1000).toFixed(1) + 'K' : t.tokens_used}</span>
+                  <span>${t.cost.toFixed(4)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="card">
+        <div className="card-header">
+          <span className="card-title">Tenants</span>
+        </div>
+        <form onSubmit={createTenant} style={{display:'flex', gap:'8px', marginBottom:'16px'}}>
+          <input className="form-input" value={newName} onChange={e => setNewName(e.target.value)}
+            placeholder="tenant-name (lowercase, a-z, 0-9, hyphens)" style={{flex:1}} />
+          <button className="btn btn-primary" type="submit">Create</button>
+        </form>
+        {loading ? <p>Loading...</p> : tenants.length === 0 ? (
+          <div className="empty"><div className="empty-icon">📦</div><p>No tenants yet. Create one above.</p></div>
+        ) : tenants.map(t => (
+          <div key={t.id} className="agent-item">
+            <div className="agent-info">
+              <Link to={`/tenants/${t.name}`} className="agent-name">{t.name}</Link>
+              <span className="badge badge-blue">{t.plan}</span>
+              {t.role && <span className={`badge ${t.role === 'owner' ? 'badge-purple' : 'badge-green'}`}>{t.role}</span>}
+            </div>
+            <div style={{display:'flex', gap:'8px', alignItems:'center'}}>
+              <Link to={`/tenants/${t.name}/billing`} className="btn btn-sm">📊 Billing</Link>
+              <span style={{color:'var(--text-secondary)', fontSize:'12px'}}>
+                Created: {new Date(t.created_at).toLocaleDateString()}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ─── Tenant Detail Page ───
+function TenantPage() {
+  const [agents, setAgents] = useState([])
+  const [newAgent, setNewAgent] = useState('')
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [channelModal, setChannelModal] = useState(null) // { agentId, agentName }
+  const [createModal, setCreateModal] = useState(false)
+  const [logsModal, setLogsModal] = useState(null) // { agentId, agentName }
+  const tenantName = window.location.pathname.split('/tenants/')[1]?.split('/')[0]
+  const navigate = useNavigate()
+
+  const loadAgents = () => {
+    api.listAgents(tenantName).then(setAgents).catch(e => setError(e.message)).finally(() => setLoading(false))
+  }
+  useState(loadAgents, [])
+
+  const deleteAgent = async (id) => {
+    if (!confirm('Delete this agent? This will stop the pod.')) return
+    try {
+      await api.deleteAgent(tenantName, id)
+      loadAgents()
+    } catch (err) { setError(err.message) }
+  }
+
+  return (
+    <div className="container">
+      <div className="page-header">
+        <h1>Tenant: {tenantName}</h1>
+        <p>
+          <Link to="/">← Back to Dashboard</Link>
+          {' · '}
+          <Link to={`/tenants/${tenantName}/billing`}>📊 Billing & Usage</Link>
+        </p>
+      </div>
+
+      {error && <div className="alert alert-error">{error}</div>}
+      {success && <div className="alert alert-success">{success}</div>}
+
+      <div className="card">
+        <div className="card-header">
+          <span className="card-title">Agents</span>
+          <button className="btn btn-primary btn-sm" onClick={() => setCreateModal(true)}>+ Create Agent</button>
+        </div>
+        {loading ? <p>Loading...</p> : agents.length === 0 ? (
+          <div className="empty"><div className="empty-icon">🤖</div><p>No agents yet. Click "Create Agent" above.</p></div>
+        ) : agents.map(a => (
+          <div key={a.id} className="agent-item">
+            <div className="agent-info">
+              <span className="agent-name">{a.name}</span>
+              <span className={`badge ${a.status === 'running' ? 'badge-green' : 'badge-orange'}`}>{a.status}</span>
+              <span className="badge badge-blue">{a.llm_provider || 'bedrock-irsa'}</span>
+              {a.llm_model && <span style={{color:'var(--text-secondary)', fontSize:'11px'}}>{a.llm_model}</span>}
+              <div className="agent-channels">
+                {(a.channels || []).map(ch => <span key={ch} className="channel-chip">{ch}</span>)}
+              </div>
+            </div>
+            <div style={{display:'flex', gap:'6px'}}>
+              <button className="btn btn-sm" onClick={() => setLogsModal({agentId: a.id, agentName: a.name})}>📋 Logs</button>
+              <button className="btn btn-sm" onClick={() => setChannelModal({agentId: a.id, agentName: a.name})}>+ Channel</button>
+              <button className="btn btn-sm btn-danger" onClick={() => deleteAgent(a.id)}>Delete</button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {createModal && (
+        <CreateAgentModal
+          tenantName={tenantName}
+          onClose={() => { setCreateModal(false); loadAgents() }}
+          onSuccess={(msg) => { setSuccess(msg); setCreateModal(false); loadAgents() }}
+          onError={setError}
+        />
+      )}
+
+      {channelModal && (
+        <ChannelModal
+          tenantName={tenantName}
+          agentId={channelModal.agentId}
+          agentName={channelModal.agentName}
+          onClose={() => { setChannelModal(null); loadAgents() }}
+        />
+      )}
+
+      {logsModal && (
+        <LogsModal
+          tenantName={tenantName}
+          agentId={logsModal.agentId}
+          agentName={logsModal.agentName}
+          onClose={() => setLogsModal(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+// ─── Create Agent Modal ───
+function CreateAgentModal({ tenantName, onClose, onSuccess, onError }) {
+  const [name, setName] = useState('')
+  const [providers, setProviders] = useState(null)
+  const [provider, setProvider] = useState('bedrock-irsa')
+  const [model, setModel] = useState('')
+  const [apiKeys, setApiKeys] = useState({})
+  const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  // Load providers on mount
+  useState(() => {
+    api.getLlmProviders().then(p => {
+      setProviders(p)
+      setModel(p['bedrock-irsa']?.default_model || '')
+    }).catch(e => setError(e.message))
+  }, [])
+
+  const currentProvider = providers?.[provider]
+
+  const handleProviderChange = (p) => {
+    setProvider(p)
+    setApiKeys({})
+    if (providers?.[p]) setModel(providers[p].default_model)
+  }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setError(''); setSubmitting(true)
+    try {
+      await api.createAgent(tenantName, name.trim(), {
+        llmProvider: provider,
+        llmModel: model || undefined,
+        llmApiKeys: Object.keys(apiKeys).length ? apiKeys : undefined,
+      })
+      onSuccess('Agent created! Pod is starting...')
+    } catch (err) {
+      setError(err.message)
+    } finally { setSubmitting(false) }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()} style={{maxWidth:'520px'}}>
+        <h2>Create Agent</h2>
+        {error && <div className="alert alert-error">{error}</div>}
+        <form onSubmit={handleSubmit}>
+          <div className="form-group">
+            <label>Agent Name</label>
+            <input className="form-input" value={name} onChange={e => setName(e.target.value)}
+              placeholder="my-agent (lowercase, a-z, 0-9, hyphens)" required pattern="^[a-z0-9-]+$" minLength={3} />
+          </div>
+
+          <div className="form-group">
+            <label>LLM Provider</label>
+            <select className="form-input" value={provider} onChange={e => handleProviderChange(e.target.value)}>
+              {providers ? Object.entries(providers).map(([key, p]) => (
+                <option key={key} value={key}>{p.name}</option>
+              )) : <option>Loading...</option>}
+            </select>
+          </div>
+
+          {currentProvider && (
+            <div className="form-group">
+              <label>Model</label>
+              <select className="form-input" value={model} onChange={e => setModel(e.target.value)}>
+                {currentProvider.models.map(m => (
+                  <option key={m.id} value={m.id}>{m.name} ({m.id})</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {currentProvider?.required_keys?.length > 0 && (
+            <div style={{background:'var(--bg-secondary)', padding:'12px', borderRadius:'8px', marginBottom:'12px'}}>
+              <p style={{fontSize:'13px', color:'var(--text-secondary)', marginBottom:'8px'}}>
+                🔑 API Keys required for {currentProvider.name}
+              </p>
+              {currentProvider.required_keys.map(key => (
+                <div className="form-group" key={key} style={{marginBottom:'8px'}}>
+                  <label style={{fontSize:'12px'}}>{key}</label>
+                  <input className="form-input" type="password" placeholder={key}
+                    value={apiKeys[key] || ''} onChange={e => setApiKeys({...apiKeys, [key]: e.target.value})} required />
+                </div>
+              ))}
+            </div>
+          )}
+
+          {provider === 'bedrock-irsa' && (
+            <p style={{fontSize:'13px', color:'var(--text-secondary)', marginBottom:'12px'}}>
+              ✅ No API keys needed — uses platform-managed AWS Bedrock access.
+            </p>
+          )}
+
+          <div className="modal-actions">
+            <button type="button" className="btn" onClick={onClose}>Cancel</button>
+            <button type="submit" className="btn btn-primary" disabled={submitting}>
+              {submitting ? 'Creating...' : 'Create Agent'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ─── Channel Binding Modal ───
+function ChannelModal({ tenantName, agentId, agentName, onClose }) {
+  const [channelType, setChannelType] = useState('telegram')
+  const [creds, setCreds] = useState({})
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+
+  const FIELDS = {
+    telegram: [{ key: 'bot_token', label: 'Bot Token', placeholder: '123456:ABC-DEF...' }],
+    feishu: [
+      { key: 'app_id', label: 'App ID', placeholder: 'cli_xxx' },
+      { key: 'app_secret', label: 'App Secret', placeholder: 'xxx' },
+    ],
+    discord: [{ key: 'bot_token', label: 'Bot Token', placeholder: 'MTk...' }],
+    whatsapp: [
+      { key: 'phone_number_id', label: 'Phone Number ID', placeholder: '123456789' },
+      { key: 'access_token', label: 'Access Token', placeholder: 'EAA...' },
+      { key: 'verify_token', label: 'Verify Token', placeholder: 'my-verify-token' },
+    ],
+  }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setError(''); setSuccess('')
+    try {
+      const res = await api.bindChannel(tenantName, agentId, channelType, creds)
+      setSuccess(res.message || 'Channel bound!')
+      setTimeout(onClose, 1500)
+    } catch (err) { setError(err.message) }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()}>
+        <h2>Bind Channel to {agentName}</h2>
+        {error && <div className="alert alert-error">{error}</div>}
+        {success && <div className="alert alert-success">{success}</div>}
+        <form onSubmit={handleSubmit}>
+          <div className="form-group">
+            <label>Channel Type</label>
+            <select className="form-input" value={channelType} onChange={e => { setChannelType(e.target.value); setCreds({}) }}>
+              <option value="telegram">Telegram</option>
+              <option value="feishu">Feishu (飞书)</option>
+              <option value="discord">Discord</option>
+              <option value="whatsapp">WhatsApp</option>
+            </select>
+          </div>
+          {FIELDS[channelType]?.map(f => (
+            <div className="form-group" key={f.key}>
+              <label>{f.label}</label>
+              <input className="form-input" type="password" placeholder={f.placeholder}
+                value={creds[f.key] || ''} onChange={e => setCreds({...creds, [f.key]: e.target.value})} required />
+            </div>
+          ))}
+          <div className="modal-actions">
+            <button type="button" className="btn" onClick={onClose}>Cancel</button>
+            <button type="submit" className="btn btn-primary">Bind Channel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ─── Logs Modal ───
+function LogsModal({ tenantName, agentId, agentName, onClose }) {
+  const [logs, setLogs] = useState('')
+  const [container, setContainer] = useState('openclaw')
+  const [containers, setContainers] = useState(['openclaw', 'metrics-exporter', 'gateway-proxy'])
+  const [tail, setTail] = useState(200)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [autoRefresh, setAutoRefresh] = useState(false)
+
+  const fetchLogs = async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const res = await api.getAgentLogs(tenantName, agentId, container, tail)
+      setLogs(res.logs || '(no logs)')
+      if (res.available_containers) setContainers(res.available_containers)
+      if (res.error) setError(res.error)
+    } catch (e) { setError(e.message) }
+    finally { setLoading(false) }
+  }
+
+  useEffect(() => { fetchLogs() }, [container, tail])
+
+  useEffect(() => {
+    if (!autoRefresh) return
+    const interval = setInterval(fetchLogs, 5000)
+    return () => clearInterval(interval)
+  }, [autoRefresh, container, tail])
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal logs-modal" onClick={e => e.stopPropagation()}>
+        <div className="logs-header">
+          <h2>📋 Logs — {agentName}</h2>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <select className="form-input" style={{ width: 'auto' }} value={container}
+              onChange={e => setContainer(e.target.value)}>
+              {containers.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <select className="form-input" style={{ width: 'auto' }} value={tail}
+              onChange={e => setTail(+e.target.value)}>
+              <option value={50}>50 lines</option>
+              <option value={200}>200 lines</option>
+              <option value={500}>500 lines</option>
+              <option value={1000}>1000 lines</option>
+            </select>
+            <label style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+              <input type="checkbox" checked={autoRefresh} onChange={e => setAutoRefresh(e.target.checked)} />
+              Auto
+            </label>
+            <button className="btn btn-sm" onClick={fetchLogs} disabled={loading}>
+              {loading ? '⏳' : '🔄'}
+            </button>
+          </div>
+        </div>
+        {error && <div className="alert alert-error" style={{ margin: '8px 0' }}>{error}</div>}
+        <pre className="logs-content">{logs}</pre>
+        <div className="modal-actions">
+          <button className="btn" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Billing Page ───
+function BillingPage() {
+  const { name: tenantName } = useParams()
+  const [billing, setBilling] = useState(null)
+  const [usage, setUsage] = useState(null)
+  const [agentUsage, setAgentUsage] = useState({}) // { agentName: data }
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [expandedAgent, setExpandedAgent] = useState(null)
+  const [period, setPeriod] = useState(30)
+
+  useEffect(() => {
+    setLoading(true)
+    Promise.all([
+      api.getBilling(tenantName),
+      api.getUsageTokens(tenantName, period),
+    ]).then(([b, u]) => {
+      setBilling(b)
+      setUsage(u)
+    }).catch(e => setError(e.message)).finally(() => setLoading(false))
+  }, [tenantName, period])
+
+  const loadAgentDetail = async (agentName) => {
+    if (expandedAgent === agentName) { setExpandedAgent(null); return }
+    setExpandedAgent(agentName)
+    if (agentUsage[agentName]) return
+    try {
+      const data = await api.getAgentUsage(tenantName, agentName, period * 24)
+      setAgentUsage(prev => ({ ...prev, [agentName]: data }))
+    } catch (e) { setError(e.message) }
+  }
+
+  const fmtTokens = (n) => {
+    if (!n) return '0'
+    if (n >= 1_000_000) return (n / 1_000_000).toFixed(2) + 'M'
+    if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K'
+    return n.toString()
+  }
+
+  const fmtCost = (c) => c != null ? '$' + c.toFixed(4) : '$0.00'
+
+  const quotaColor = (pct) => {
+    if (pct >= 90) return 'var(--accent-red)'
+    if (pct >= 70) return 'var(--accent-orange)'
+    return 'var(--accent-green)'
+  }
+
+  if (loading) return <div className="container"><p>Loading billing data...</p></div>
+
+  return (
+    <div className="container">
+      <div className="page-header">
+        <h1>📊 Billing — {tenantName}</h1>
+        <p><Link to={`/tenants/${tenantName}`}>← Back to Tenant</Link></p>
+      </div>
+
+      {error && <div className="alert alert-error">{error}</div>}
+
+      {/* Quota Overview Card */}
+      {billing && (
+        <div className="card">
+          <div className="card-header">
+            <span className="card-title">Plan & Quota</span>
+            <span className={`badge ${billing.current_plan === 'free' ? 'badge-orange' : 'badge-green'}`}>
+              {billing.current_plan.toUpperCase()}
+            </span>
+          </div>
+          <div className="billing-stats">
+            <div className="stat-box">
+              <div className="stat-label">Tokens Used</div>
+              <div className="stat-value">{fmtTokens(billing.current_month_usage?.tokens_used)}</div>
+            </div>
+            <div className="stat-box">
+              <div className="stat-label">Token Limit</div>
+              <div className="stat-value">{billing.current_month_usage?.tokens_limit ? fmtTokens(billing.current_month_usage.tokens_limit) : '∞'}</div>
+            </div>
+            <div className="stat-box">
+              <div className="stat-label">Days Until Reset</div>
+              <div className="stat-value">{billing.current_month_usage?.days_until_reset ?? '—'}</div>
+            </div>
+            <div className="stat-box">
+              <div className="stat-label">Monthly Price</div>
+              <div className="stat-value">${billing.limits?.price_monthly ?? 0}</div>
+            </div>
+          </div>
+
+          {/* Quota Bar */}
+          <div className="quota-bar-container">
+            <div className="quota-bar-labels">
+              <span>Usage: {(billing.current_month_usage?.percentage_used ?? 0).toFixed(1)}%</span>
+              {billing.current_month_usage?.is_warning && <span className="badge badge-red">⚠ Warning</span>}
+              {billing.current_month_usage?.is_over_quota && <span className="badge badge-red">🚫 Over Quota</span>}
+            </div>
+            <div className="quota-bar">
+              <div className="quota-bar-fill"
+                style={{
+                  width: Math.min(billing.current_month_usage?.percentage_used ?? 0, 100) + '%',
+                  background: quotaColor(billing.current_month_usage?.percentage_used ?? 0)
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Plan Limits */}
+          <div className="plan-limits">
+            <span>Max Agents: <strong>{billing.limits?.max_agents ?? '—'}</strong></span>
+            <span>Memory/Agent: <strong>{billing.limits?.max_memory_per_agent ?? '—'}</strong></span>
+            <span>CPU/Agent: <strong>{billing.limits?.max_cpu_per_agent ?? '—'}</strong></span>
+          </div>
+        </div>
+      )}
+
+      {/* Usage Breakdown */}
+      {usage && (
+        <div className="card">
+          <div className="card-header">
+            <span className="card-title">Token Usage Breakdown</span>
+            <select className="form-input" style={{ width: 'auto' }} value={period} onChange={e => setPeriod(+e.target.value)}>
+              <option value={7}>Last 7 days</option>
+              <option value={30}>Last 30 days</option>
+              <option value={90}>Last 90 days</option>
+            </select>
+          </div>
+
+          {/* Summary */}
+          <div className="billing-stats">
+            <div className="stat-box">
+              <div className="stat-label">Total Tokens</div>
+              <div className="stat-value">{fmtTokens(usage.summary?.total_tokens)}</div>
+            </div>
+            <div className="stat-box">
+              <div className="stat-label">Input</div>
+              <div className="stat-value">{fmtTokens(usage.summary?.input_tokens)}</div>
+            </div>
+            <div className="stat-box">
+              <div className="stat-label">Output</div>
+              <div className="stat-value">{fmtTokens(usage.summary?.output_tokens)}</div>
+            </div>
+            <div className="stat-box">
+              <div className="stat-label">Est. Cost</div>
+              <div className="stat-value">{fmtCost(usage.summary?.estimated_cost)}</div>
+            </div>
+          </div>
+
+          {/* By Agent */}
+          {usage.by_agent?.length > 0 && (
+            <>
+              <h3 className="section-title">By Agent</h3>
+              <div className="usage-table">
+                <div className="usage-row usage-header">
+                  <span>Agent</span><span>Tokens</span><span>Calls</span><span>Cost</span><span></span>
+                </div>
+                {usage.by_agent.map(a => (
+                  <div key={a.agent_name}>
+                    <div className="usage-row" onClick={() => loadAgentDetail(a.agent_name)} style={{ cursor: 'pointer' }}>
+                      <span className="agent-name-link">{a.agent_name}</span>
+                      <span>{fmtTokens(a.total_tokens)}</span>
+                      <span>{a.call_count}</span>
+                      <span>{fmtCost(a.estimated_cost)}</span>
+                      <span style={{ color: 'var(--text-secondary)' }}>{expandedAgent === a.agent_name ? '▼' : '▶'}</span>
+                    </div>
+                    {expandedAgent === a.agent_name && agentUsage[a.agent_name] && (
+                      <div className="agent-detail">
+                        {agentUsage[a.agent_name].hourly?.length > 0 ? (
+                          <div className="mini-chart">
+                            {agentUsage[a.agent_name].hourly.slice(-48).map((h, i) => (
+                              <div key={i} className="mini-bar-wrapper" title={`${h.hour}: ${fmtTokens(h.total_tokens)} tokens`}>
+                                <div className="mini-bar"
+                                  style={{ height: Math.max(2, Math.min(40, (h.total_tokens / Math.max(...agentUsage[a.agent_name].hourly.map(x => x.total_tokens || 1))) * 40)) + 'px' }}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        ) : <p style={{ color: 'var(--text-secondary)', fontSize: '13px', padding: '8px' }}>No hourly data yet</p>}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* By Model */}
+          {usage.by_model?.length > 0 && (
+            <>
+              <h3 className="section-title">By Model</h3>
+              <div className="usage-table">
+                <div className="usage-row usage-header">
+                  <span>Model</span><span>Tokens</span><span>Calls</span><span>Cost</span><span></span>
+                </div>
+                {usage.by_model.map(m => (
+                  <div key={m.model} className="usage-row">
+                    <span style={{ fontSize: '12px' }}>{m.model}</span>
+                    <span>{fmtTokens(m.total_tokens)}</span>
+                    <span>{m.call_count}</span>
+                    <span>{fmtCost(m.estimated_cost)}</span>
+                    <span></span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* Daily Trend */}
+          {usage.daily?.length > 0 && (
+            <>
+              <h3 className="section-title">Daily Trend</h3>
+              <div className="daily-chart">
+                {usage.daily.map((d, i) => {
+                  const maxTokens = Math.max(...usage.daily.map(x => x.total_tokens || 1))
+                  return (
+                    <div key={i} className="daily-bar-wrapper" title={`${d.date}: ${fmtTokens(d.total_tokens)} tokens, ${fmtCost(d.estimated_cost)}`}>
+                      <div className="daily-bar"
+                        style={{ height: Math.max(2, (d.total_tokens / maxTokens) * 80) + 'px' }}
+                      />
+                      <span className="daily-label">{d.date?.slice(5, 10)}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </>
+          )}
+
+          {/* Empty state */}
+          {(!usage.by_agent?.length && !usage.by_model?.length && !usage.daily?.length) && (
+            <div className="empty">
+              <div className="empty-icon">📈</div>
+              <p>No usage data yet. Start chatting with your agents to generate usage.</p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── App Router ───
+export default function App() {
+  const auth = useAuth()
+
+  return (
+    <div className="app">
+      <Navbar auth={auth} />
+      <Routes>
+        <Route path="/login" element={auth.isLoggedIn ? <Navigate to="/" /> : <LoginPage onLogin={auth.refresh} />} />
+        <Route path="/signup" element={auth.isLoggedIn ? <Navigate to="/" /> : <SignupPage onLogin={auth.refresh} />} />
+        <Route path="/" element={auth.isLoggedIn ? <DashboardPage /> : <Navigate to="/login" />} />
+        <Route path="/tenants/:name" element={auth.isLoggedIn ? <TenantPage /> : <Navigate to="/login" />} />
+        <Route path="/tenants/:name/billing" element={auth.isLoggedIn ? <BillingPage /> : <Navigate to="/login" />} />
+      </Routes>
+    </div>
+  )
+}

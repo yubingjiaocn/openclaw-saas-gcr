@@ -1,0 +1,5 @@
+# AWS Load Balancer Controller values
+# Only needed for Management API ALB
+# Web Console served via CloudFront → S3
+
+# TODO: Helm values for aws-load-balancer-controller

@@ -1,0 +1,14 @@
+name: CD
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'cdk/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # TODO: CDK deploy
