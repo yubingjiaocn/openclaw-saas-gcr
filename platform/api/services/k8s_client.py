@@ -319,7 +319,13 @@ class K8sClient:
                     "raw": raw_config,
                 },
                 "storage": {"persistence": {"enabled": True, "size": "10Gi"}},
-                "chromium": {"enabled": enable_chromium},
+                "chromium": {
+                    "enabled": enable_chromium,
+                    **({"extraEnv": [
+                        {"name": "TIMEOUT", "value": "300000"},
+                        {"name": "CONNECTION_TIMEOUT", "value": "120000"},
+                    ]} if enable_chromium else {}),
+                },
                 "resources": {
                     "requests": {"cpu": "250m", "memory": "1Gi"},
                     "limits": {"cpu": "1", "memory": "2Gi"},
