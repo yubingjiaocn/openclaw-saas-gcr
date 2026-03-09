@@ -277,11 +277,12 @@ class K8sClient:
             raw_config["agents"]["defaults"]["model"]["primary"] = f"custom/{model_id}"
 
         # Browser config: when Chromium sidecar is enabled, configure CDP connection
+        # Use a custom profile name (not "openclaw" which is auto-managed and tries to launch)
         if enable_chromium:
             raw_config["browser"] = {
-                "defaultProfile": "openclaw",
+                "defaultProfile": "browserless",
                 "profiles": {
-                    "openclaw": {
+                    "browserless": {
                         "cdpUrl": "http://127.0.0.1:9222",
                         "color": "#4285F4",
                     },
