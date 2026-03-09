@@ -20,15 +20,19 @@ When an agent is created with `enable_chromium: true`:
 {
   "browser": {
     "defaultProfile": "browserless",
+    "remoteCdpTimeoutMs": 3000,
+    "remoteCdpHandshakeTimeoutMs": 5000,
     "profiles": {
       "browserless": {
-        "cdpUrl": "http://127.0.0.1:9222",
+        "cdpUrl": "http://<agent-name>-0:9222",
         "color": "#4285F4"
       }
     }
   }
 }
 ```
+
+> **Important**: Use the pod hostname (`<agent-name>-0`) instead of `127.0.0.1`. OpenClaw treats loopback addresses as local and performs process ownership checks on the port — rejecting it because the sidecar is "not by openclaw". Using the pod hostname makes it a non-loopback address, so OpenClaw treats it as remote CDP and connects directly without ownership checks.
 
 ### What the operator auto-adds (merge):
 
@@ -152,7 +156,7 @@ kubectl patch openclawinstance <agent-name> -n tenant-<tenant> \
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| `Port 9222 is in use but not by openclaw` | Profile named `openclaw` | Change to `browserless` profile |
+| `Port 9222 is in use but not by openclaw` | cdpUrl uses `127.0.0.1` (loopback) | Change to `http://<agent-name>-0:9222` (pod hostname) |
 | `attachOnly is enabled and CDP websocket not reachable` | Agent using `chrome`/`default` profile | Ensure `defaultProfile: "browserless"` |
 | Old profile stuck in config | `mergeMode: "merge"` preserves PVC data | Switch to `overwrite` temporarily |
 | Chromium pod `ImagePullBackOff` (CN) | ghcr.io blocked in China | Re-import image via S3 + DaemonSet |

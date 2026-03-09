@@ -278,12 +278,17 @@ class K8sClient:
 
         # Browser config: when Chromium sidecar is enabled, configure CDP connection
         # Use a custom profile name (not "openclaw" which is auto-managed and tries to launch)
+        # Use pod hostname instead of 127.0.0.1 — OpenClaw treats loopback as local and
+        # rejects it when port is occupied by the sidecar ("not by openclaw").
+        # Pod hostname (e.g. agent-0308-0) is non-loopback → treated as remote CDP.
         if enable_chromium:
             raw_config["browser"] = {
                 "defaultProfile": "browserless",
+                "remoteCdpTimeoutMs": 3000,
+                "remoteCdpHandshakeTimeoutMs": 5000,
                 "profiles": {
                     "browserless": {
-                        "cdpUrl": "http://127.0.0.1:9222",
+                        "cdpUrl": f"http://{agent_name}-0:9222",
                         "color": "#4285F4",
                     },
                 },
