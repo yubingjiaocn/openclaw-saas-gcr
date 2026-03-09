@@ -134,6 +134,7 @@ function SignupPage({ onLogin }) {
 function DashboardPage() {
   const [tenants, setTenants] = useState([])
   const [newName, setNewName] = useState('')
+  const [newPlan, setNewPlan] = useState('free')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [adminStats, setAdminStats] = useState(null)
@@ -152,9 +153,10 @@ function DashboardPage() {
     if (!newName.trim()) return
     setError('')
     try {
-      const t = await api.createTenant(newName.trim())
+      const t = await api.createTenant(newName.trim(), newPlan)
       setTenants([...tenants, t])
       setNewName('')
+      setNewPlan('free')
     } catch (err) { setError(err.message) }
   }
 
@@ -226,6 +228,11 @@ function DashboardPage() {
           <form onSubmit={createTenant} style={{display:'flex', gap:'8px', marginBottom:'16px'}}>
             <input className="form-input" value={newName} onChange={e => setNewName(e.target.value)}
               placeholder="tenant-name (lowercase, a-z, 0-9, hyphens)" style={{flex:1}} />
+            <select className="form-input" value={newPlan} onChange={e => setNewPlan(e.target.value)} style={{width:'140px'}}>
+              <option value="free">Free</option>
+              <option value="pro">Pro</option>
+              <option value="enterprise">Enterprise</option>
+            </select>
             <button className="btn btn-primary" type="submit">Create</button>
           </form>
         )}
@@ -337,7 +344,7 @@ function TenantPage() {
             <div className="agent-info">
               <span className="agent-name">{a.name}</span>
               <span className={`badge ${a.status === 'running' ? 'badge-green' : 'badge-orange'}`}>{a.status}</span>
-              <span className="badge badge-blue">{a.llm_provider || 'bedrock-irsa'}</span>
+              <span className="badge badge-blue">{a.llm_provider || 'openai-compatible'}</span>
               {a.llm_model && <span style={{color:'var(--text-secondary)', fontSize:'11px'}}>{a.llm_model}</span>}
               <div className="agent-channels">
                 {(a.channels || []).map(ch => <span key={ch} className="channel-chip">{ch}</span>)}
@@ -478,7 +485,7 @@ function AllowedEmailsCard({ tenantName, initialEmails }) {
 function CreateAgentModal({ tenantName, onClose, onSuccess, onError }) {
   const [name, setName] = useState('')
   const [providers, setProviders] = useState(null)
-  const [provider, setProvider] = useState('bedrock-irsa')
+  const [provider, setProvider] = useState('openai-compatible')
   const [model, setModel] = useState('')
   const [apiKeys, setApiKeys] = useState({})
   const [error, setError] = useState('')
@@ -488,7 +495,7 @@ function CreateAgentModal({ tenantName, onClose, onSuccess, onError }) {
   useState(() => {
     api.getLlmProviders().then(p => {
       setProviders(p)
-      setModel(p['bedrock-irsa']?.default_model || '')
+      setModel(p['openai-compatible']?.default_model || '')
     }).catch(e => setError(e.message))
   }, [])
 
@@ -547,12 +554,12 @@ function CreateAgentModal({ tenantName, onClose, onSuccess, onError }) {
             </div>
           )}
 
-          {currentProvider?.required_keys?.length > 0 && (
+          {currentProvider?.required_keys?.length > 0 && provider !== 'openai-compatible' && (
             <div style={{background:'var(--bg-secondary)', padding:'12px', borderRadius:'8px', marginBottom:'12px'}}>
               <p style={{fontSize:'13px', color:'var(--text-secondary)', marginBottom:'8px'}}>
                 🔑 API Keys required for {currentProvider.name}
               </p>
-              {currentProvider.required_keys.map(key => (
+              {currentProvider.required_keys.filter(k => k !== 'CUSTOM_BASE_URL' && k !== 'CUSTOM_MODEL_ID').map(key => (
                 <div className="form-group" key={key} style={{marginBottom:'8px'}}>
                   <label style={{fontSize:'12px'}}>{key}</label>
                   <input className="form-input" type="password" placeholder={key}
@@ -562,7 +569,30 @@ function CreateAgentModal({ tenantName, onClose, onSuccess, onError }) {
             </div>
           )}
 
-          {provider === 'bedrock-irsa' && (
+          {provider === 'openai-compatible' && (
+            <div style={{background:'var(--bg-secondary)', padding:'12px', borderRadius:'8px', marginBottom:'12px'}}>
+              <p style={{fontSize:'13px', color:'var(--text-secondary)', marginBottom:'8px'}}>
+                🌐 OpenAI-Compatible Endpoint
+              </p>
+              <div className="form-group" style={{marginBottom:'8px'}}>
+                <label style={{fontSize:'12px'}}>API Base URL</label>
+                <input className="form-input" placeholder="https://api.example.com/v1"
+                  value={apiKeys['CUSTOM_BASE_URL'] || ''} onChange={e => setApiKeys({...apiKeys, CUSTOM_BASE_URL: e.target.value})} required />
+              </div>
+              <div className="form-group" style={{marginBottom:'8px'}}>
+                <label style={{fontSize:'12px'}}>API Key</label>
+                <input className="form-input" type="password" placeholder="sk-..."
+                  value={apiKeys['CUSTOM_API_KEY'] || ''} onChange={e => setApiKeys({...apiKeys, CUSTOM_API_KEY: e.target.value})} required />
+              </div>
+              <div className="form-group" style={{marginBottom:'8px'}}>
+                <label style={{fontSize:'12px'}}>Model ID</label>
+                <input className="form-input" placeholder="gpt-4o, deepseek-chat, qwen-plus..."
+                  value={apiKeys['CUSTOM_MODEL_ID'] || ''} onChange={e => setApiKeys({...apiKeys, CUSTOM_MODEL_ID: e.target.value})} required />
+              </div>
+            </div>
+          )}
+
+          {provider === 'bedrock-irsa' || false && (
             <p style={{fontSize:'13px', color:'var(--text-secondary)', marginBottom:'12px'}}>
               ✅ No API keys needed — uses platform-managed AWS Bedrock access.
             </p>

@@ -200,7 +200,7 @@ class K8sClient:
         self,
         tenant_name: str,
         agent_name: str,
-        llm_provider: str = "bedrock-irsa",
+        llm_provider: str = "openai-compatible",
         llm_model: Optional[str] = None,
         llm_api_keys: Optional[Dict[str, str]] = None,
         channel_config: Optional[Dict] = None,
@@ -208,7 +208,7 @@ class K8sClient:
         """Create OpenClawInstance CRD + agent-keys secret.
 
         LLM provider options:
-        - bedrock-irsa: Uses node IAM role (no API keys needed, platform-managed)
+        
         - bedrock: User provides AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY
         - openai: User provides OPENAI_API_KEY
         - anthropic: User provides ANTHROPIC_API_KEY
@@ -233,7 +233,9 @@ class K8sClient:
             missing = required - provided
             if missing:
                 raise ValueError(f"Missing required API keys for {llm_provider}: {', '.join(missing)}")
-            secret_data = llm_api_keys
+            # Only store actual secrets in K8s Secret (not config values like URLs)
+            non_secret_keys = {"CUSTOM_BASE_URL", "CUSTOM_MODEL_ID"}
+            secret_data = {k: v for k, v in llm_api_keys.items() if k not in non_secret_keys}
 
         await self.create_secret(tenant_name, f"{agent_name}-keys", secret_data)
 
@@ -242,9 +244,9 @@ class K8sClient:
         #    - For bedrock: need explicit provider config
         model_prefix = {
             "bedrock": f"amazon-bedrock/{model}",
-            "bedrock-irsa": f"amazon-bedrock/{model}",
             "openai": model,
             "anthropic": model,
+            "openai-compatible": f"custom/{model}",
         }.get(llm_provider, model)
 
         raw_config = {
@@ -260,6 +262,24 @@ class K8sClient:
         # Add provider-specific config (e.g., Bedrock needs explicit provider block)
         provider_config = provider_def["config_builder"](model)
         raw_config.update(provider_config)
+
+        # OpenAI-compatible: build custom provider config from user-supplied keys
+        if llm_provider == "openai-compatible" and llm_api_keys:
+            base_url = llm_api_keys.get("CUSTOM_BASE_URL", "")
+            model_id = llm_api_keys.get("CUSTOM_MODEL_ID", model)
+            raw_config["models"] = {
+                "providers": {
+                    "custom": {
+                        "baseUrl": base_url,
+                        "apiKey": "${CUSTOM_API_KEY}",
+                        "api": "openai-completions",
+                        "models": [
+                            {"id": model_id, "name": model_id, "contextWindow": 200000, "maxTokens": 8192},
+                        ],
+                    }
+                }
+            }
+            raw_config["agents"]["defaults"]["model"]["primary"] = f"custom/{model_id}"
 
         if channel_config:
             raw_config["channels"] = channel_config

@@ -75,8 +75,8 @@ class ApiClient {
   // Tenants
   listTenants() { return this.request('/api/v1/tenants') }
   getTenant(tenant) { return this.request(`/api/v1/tenants/${tenant}`) }
-  createTenant(name) {
-    return this.request('/api/v1/tenants', { method: 'POST', body: JSON.stringify({ name }) })
+  createTenant(name, plan = 'free') {
+    return this.request('/api/v1/tenants', { method: 'POST', body: JSON.stringify({ name, plan }) })
   }
   deleteTenant(name) { return this.request(`/api/v1/tenants/${name}`, { method: 'DELETE' }) }
 

@@ -78,6 +78,7 @@ class TenantCreate(BaseModel):
     """Tenant creation schema"""
 
     name: str = Field(..., min_length=3, max_length=63, pattern="^[a-z0-9-]+$")
+    plan: Optional[str] = Field(default="free", description="Plan tier: free, pro, enterprise")
     allowed_emails: Optional[List[str]] = Field(default=None, description="Emails allowed to signup for this tenant")
 
 

@@ -28,50 +28,23 @@ class Agent(Base):
     tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False)
     status = Column(String(50), default=AgentStatus.PENDING.value, nullable=False)
     channels = Column(JSON, default=list, nullable=False)
-    llm_provider = Column(String(50), default="openai", nullable=False)
+    llm_provider = Column(String(50), default="bedrock", nullable=False)
     llm_model = Column(String(255), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
 # ─── LLM Provider definitions ───
-# NOTE: bedrock-irsa removed — IRSA is not available in AWS China regions.
-# Bedrock (AKSK) kept — users can call Bedrock in global regions using their own keys.
 
 LLM_PROVIDERS = {
-    "openai": {
-        "name": "OpenAI",
-        "env_keys": ["OPENAI_API_KEY"],
-        "optional_keys": [],
-        "default_model": "gpt-4o",
-        "models": [
-            {"id": "gpt-4o", "name": "GPT-4o"},
-            {"id": "gpt-4o-mini", "name": "GPT-4o Mini"},
-            {"id": "o3-mini", "name": "o3-mini"},
-        ],
-        "config_builder": lambda model: {},
-    },
-    "anthropic": {
-        "name": "Anthropic",
-        "env_keys": ["ANTHROPIC_API_KEY"],
-        "optional_keys": [],
-        "default_model": "claude-sonnet-4-5-20250929",
-        "models": [
-            {"id": "claude-sonnet-4-5-20250929", "name": "Claude Sonnet 4.5"},
-            {"id": "claude-sonnet-4-20250514", "name": "Claude Sonnet 4"},
-            {"id": "claude-opus-4-6", "name": "Claude Opus 4"},
-        ],
-        "config_builder": lambda model: {},
-    },
     "bedrock": {
-        "name": "AWS Bedrock (AKSK)",
-        "env_keys": ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"],
-        "optional_keys": ["AWS_DEFAULT_REGION"],
-        "default_model": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+        "name": "AWS Bedrock",
+        "env_keys": ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_DEFAULT_REGION"],
+        "optional_keys": [],
+        "default_model": "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
         "models": [
-            {"id": "us.anthropic.claude-sonnet-4-5-20250929-v1:0", "name": "Claude Sonnet 4.5 (Bedrock)"},
-            {"id": "us.anthropic.claude-sonnet-4-20250514-v1:0", "name": "Claude Sonnet 4 (Bedrock)"},
-            {"id": "us.anthropic.claude-opus-4-6-v1:0", "name": "Claude Opus 4 (Bedrock)"},
-            {"id": "us.meta.llama3-3-70b-instruct-v1:0", "name": "Llama 3.3 70B (Bedrock)"},
+            {"id": "global.anthropic.claude-sonnet-4-5-20250929-v1:0", "name": "Claude Sonnet 4.5"},
+            {"id": "global.anthropic.claude-sonnet-4-20250514-v1:0", "name": "Claude Sonnet 4"},
+            {"id": "global.anthropic.claude-opus-4-6-v1", "name": "Claude Opus 4"},
         ],
         "config_builder": lambda model: {
             "models": {
@@ -88,15 +61,27 @@ LLM_PROVIDERS = {
             }
         },
     },
-    "openai-compatible": {
-        "name": "OpenAI Compatible (Custom Endpoint)",
+    "openai": {
+        "name": "OpenAI",
         "env_keys": ["OPENAI_API_KEY"],
-        "optional_keys": ["OPENAI_BASE_URL"],
+        "optional_keys": [],
         "default_model": "gpt-4o",
         "models": [
-            {"id": "gpt-4o", "name": "GPT-4o (or custom)"},
+            {"id": "gpt-4o", "name": "GPT-4o"},
+            {"id": "gpt-4o-mini", "name": "GPT-4o Mini"},
+            {"id": "o3-mini", "name": "o3-mini"},
         ],
-        "config_builder": lambda model: {},
+        "config_builder": lambda model: {},  # OpenAI auto-configured via env var
+    },
+"openai-compatible": {
+        "name": "OpenAI Compatible",
+        "env_keys": ["CUSTOM_API_KEY"],
+        "optional_keys": ["CUSTOM_BASE_URL", "CUSTOM_MODEL_ID"],
+        "default_model": "custom-model",
+        "models": [
+            {"id": "custom-model", "name": "Custom Model (specify in API keys)"},
+        ],
+        "config_builder": lambda model: {},  # Built dynamically in k8s_client
     },
 }
 
@@ -106,7 +91,7 @@ class AgentCreate(BaseModel):
     """Agent creation schema"""
 
     name: str = Field(..., min_length=3, max_length=63, pattern="^[a-z0-9-]+$")
-    llm_provider: str = Field(default="openai", description="LLM provider: openai, anthropic, bedrock, openai-compatible")
+    llm_provider: str = Field(default="openai-compatible", description="LLM provider: bedrock, openai, openai-compatible")
     llm_model: Optional[str] = Field(default=None, description="Model ID (uses provider default if not specified)")
     llm_api_keys: Optional[Dict[str, str]] = Field(default=None, description="API keys for the LLM provider")
     config: Optional[Dict[str, Any]] = Field(default_factory=dict)

@@ -10,6 +10,7 @@ from api.models.tenant import (
     Tenant, TenantCreate, TenantResponse, TenantMember, TenantRole,
     TenantAllowedEmail, AllowedEmailRequest, AllowedEmailResponse,
     InviteMemberRequest, MemberResponse, UpdateMemberRoleRequest,
+    PlanType,
 )
 from api.models.user import User
 from api.services.auth_svc import get_current_user
@@ -143,7 +144,13 @@ async def create_tenant(
     if result.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Tenant name already exists")
 
-    tenant = Tenant(name=tenant_data.name, owner_id=current_user.id)
+    # Validate plan
+    valid_plans = [p.value for p in PlanType]
+    plan = (tenant_data.plan or "free").lower()
+    if plan not in valid_plans:
+        raise HTTPException(status_code=400, detail=f"Invalid plan: {plan}. Valid plans: {', '.join(valid_plans)}")
+
+    tenant = Tenant(name=tenant_data.name, owner_id=current_user.id, plan=plan)
     db.add(tenant)
     await db.flush()
 
