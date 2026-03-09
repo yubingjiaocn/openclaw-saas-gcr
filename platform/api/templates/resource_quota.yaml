@@ -26,4 +26,11 @@ spec:
     limits.memory: "96Gi"
     pods: "50"
     persistentvolumeclaims: "50"
+    {% elif plan == 'unlimited' %}
+    requests.cpu: "64"
+    requests.memory: "256Gi"
+    limits.cpu: "128"
+    limits.memory: "512Gi"
+    pods: "200"
+    persistentvolumeclaims: "200"
     {% endif %}

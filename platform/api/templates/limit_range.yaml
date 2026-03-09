@@ -36,4 +36,14 @@ spec:
       max:
         cpu: "8"
         memory: "16Gi"
+      {% elif plan == 'unlimited' %}
+      default:
+        cpu: "4"
+        memory: "8Gi"
+      defaultRequest:
+        cpu: "1"
+        memory: "4Gi"
+      max:
+        cpu: "32"
+        memory: "64Gi"
       {% endif %}

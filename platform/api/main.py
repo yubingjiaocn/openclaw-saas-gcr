@@ -3,11 +3,12 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 
 from api.database import init_db, seed_admin
-from api.routers import agents, auth, billing, channels, tenants, usage
+from api.routers import agents, auth, billing, channels, dashboard, tenants, usage
 from api.services.k8s_client import k8s_client
 
 
@@ -28,6 +29,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# GZip compression - reduces transfer size by 60-80%
+app.add_middleware(GZipMiddleware, minimum_size=500)
+
 # CORS - restrict in production
 app.add_middleware(
     CORSMiddleware,
@@ -39,6 +43,7 @@ app.add_middleware(
 
 # API routers
 app.include_router(auth.router)
+app.include_router(dashboard.router)
 app.include_router(tenants.router)
 app.include_router(agents.router)
 app.include_router(channels.router)
@@ -55,7 +60,11 @@ if CONSOLE_DIR.exists():
     async def serve_console(full_path: str):
         file_path = CONSOLE_DIR / full_path
         if file_path.exists() and file_path.is_file():
-            return FileResponse(file_path)
+            resp = FileResponse(file_path)
+            # Hashed assets (JS/CSS) can be cached long-term
+            if "/assets/" in full_path:
+                resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+            return resp
         return FileResponse(CONSOLE_DIR / "index.html")
 
     # Also serve /console exactly

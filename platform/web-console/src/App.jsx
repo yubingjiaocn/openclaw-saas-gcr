@@ -140,10 +140,10 @@ function DashboardPage() {
   const isAdmin = api.isPlatformAdmin()
 
   useState(() => {
-    api.listTenants().then(setTenants).catch(e => setError(e.message)).finally(() => setLoading(false))
-    if (isAdmin) {
-      api.getAdminOverview().then(setAdminStats).catch(() => {})
-    }
+    api.getDashboard().then(data => {
+      setTenants(data.tenants)
+      if (data.admin_stats) setAdminStats(data.admin_stats)
+    }).catch(e => setError(e.message)).finally(() => setLoading(false))
   }, [])
 
   const createTenant = async (e) => {
@@ -266,20 +266,28 @@ function TenantPage() {
   const navigate = useNavigate()
   const isAdmin = api.isPlatformAdmin()
 
+  const [allowedEmails, setAllowedEmails] = useState([])
+  const [billingInfo, setBillingInfo] = useState(null)
+
   // Role helpers
   const isOwnerOrAdmin = isAdmin || myRole === 'owner' || myRole === 'admin'
   const isOwner = isAdmin || myRole === 'owner'
 
   const loadAgents = () => {
-    api.listAgents(tenantName).then(setAgents).catch(e => setError(e.message)).finally(() => setLoading(false))
+    api.listAgents(tenantName).then(setAgents).catch(e => setError(e.message))
   }
   const loadMembers = () => {
     api.getMembers(tenantName).then(setMembers).catch(() => {})
   }
   useState(() => {
-    loadAgents()
-    loadMembers()
-    api.getTenant(tenantName).then(t => setMyRole(t.role)).catch(() => {})
+    // Single aggregated API call replaces 4 separate requests
+    api.getTenantDashboard(tenantName).then(data => {
+      setAgents(data.agents)
+      setMembers(data.members)
+      setMyRole(data.role)
+      setBillingInfo(data.billing)
+      setAllowedEmails(data.allowed_emails || [])
+    }).catch(e => setError(e.message)).finally(() => setLoading(false))
   }, [])
 
   const deleteAgent = async (id) => {
@@ -328,7 +336,7 @@ function TenantPage() {
             <div className="agent-info">
               <span className="agent-name">{a.name}</span>
               <span className={`badge ${a.status === 'running' ? 'badge-green' : 'badge-orange'}`}>{a.status}</span>
-              <span className="badge badge-blue">{a.llm_provider || 'openai'}</span>
+              <span className="badge badge-blue">{a.llm_provider || 'bedrock-irsa'}</span>
               {a.llm_model && <span style={{color:'var(--text-secondary)', fontSize:'11px'}}>{a.llm_model}</span>}
               <div className="agent-channels">
                 {(a.channels || []).map(ch => <span key={ch} className="channel-chip">{ch}</span>)}
@@ -344,7 +352,7 @@ function TenantPage() {
       </div>
 
       {/* Allowed Emails — admin+ only */}
-      {isOwnerOrAdmin && <AllowedEmailsCard tenantName={tenantName} />}
+      {isOwnerOrAdmin && <AllowedEmailsCard tenantName={tenantName} initialEmails={allowedEmails} />}
 
       {/* Members */}
       <div className="card" style={{ marginTop: '16px' }}>
@@ -403,17 +411,17 @@ function TenantPage() {
 }
 
 // ─── Allowed Emails Card ───
-function AllowedEmailsCard({ tenantName }) {
-  const [emails, setEmails] = useState([])
+function AllowedEmailsCard({ tenantName, initialEmails }) {
+  const [emails, setEmails] = useState(initialEmails || [])
   const [newEmail, setNewEmail] = useState('')
   const [newRole, setNewRole] = useState('member')
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!initialEmails)
   const [error, setError] = useState('')
 
   const load = () => {
     api.getAllowedEmails(tenantName).then(setEmails).catch(() => {}).finally(() => setLoading(false))
   }
-  useState(load, [])
+  useState(() => { if (!initialEmails) load() }, [])
 
   const addEmail = async (e) => {
     e.preventDefault()
@@ -469,7 +477,7 @@ function AllowedEmailsCard({ tenantName }) {
 function CreateAgentModal({ tenantName, onClose, onSuccess, onError }) {
   const [name, setName] = useState('')
   const [providers, setProviders] = useState(null)
-  const [provider, setProvider] = useState('openai')
+  const [provider, setProvider] = useState('bedrock-irsa')
   const [model, setModel] = useState('')
   const [apiKeys, setApiKeys] = useState({})
   const [error, setError] = useState('')
@@ -479,7 +487,7 @@ function CreateAgentModal({ tenantName, onClose, onSuccess, onError }) {
   useState(() => {
     api.getLlmProviders().then(p => {
       setProviders(p)
-      setModel(p['openai']?.default_model || '')
+      setModel(p['bedrock-irsa']?.default_model || '')
     }).catch(e => setError(e.message))
   }, [])
 
@@ -553,6 +561,11 @@ function CreateAgentModal({ tenantName, onClose, onSuccess, onError }) {
             </div>
           )}
 
+          {provider === 'bedrock-irsa' && (
+            <p style={{fontSize:'13px', color:'var(--text-secondary)', marginBottom:'12px'}}>
+              ✅ No API keys needed — uses platform-managed AWS Bedrock access.
+            </p>
+          )}
 
           <div className="modal-actions">
             <button type="button" className="btn" onClick={onClose}>Cancel</button>

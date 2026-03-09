@@ -11,6 +11,7 @@ from api.models.tenant import Tenant, PlanType
 from api.models.user import User
 from api.services.auth_svc import get_current_user
 from api.routers.tenants import get_user_tenant
+from api.services.k8s_client import k8s_client
 
 # Import billing quota module
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
@@ -24,28 +25,32 @@ PLAN_LIMITS = {
         "max_memory_per_agent": "2Gi",
         "max_cpu_per_agent": "1",
         "max_tokens_per_month": TOKEN_LIMITS.get("free"),
+        "token_enforcement": False,
         "price_monthly": 0,
-    },
-    "starter": {
-        "max_agents": 3,
-        "max_memory_per_agent": "4Gi",
-        "max_cpu_per_agent": "2",
-        "max_tokens_per_month": TOKEN_LIMITS.get("starter"),
-        "price_monthly": 29,
     },
     "pro": {
         "max_agents": 10,
         "max_memory_per_agent": "8Gi",
         "max_cpu_per_agent": "4",
         "max_tokens_per_month": TOKEN_LIMITS.get("pro"),
+        "token_enforcement": False,
         "price_monthly": 99,
     },
     "enterprise": {
         "max_agents": None,  # Unlimited
         "max_memory_per_agent": "16Gi",
         "max_cpu_per_agent": "8",
-        "max_tokens_per_month": None,  # Unlimited
+        "max_tokens_per_month": None,
+        "token_enforcement": False,
         "price_monthly": None,  # Custom pricing
+    },
+    "unlimited": {
+        "max_agents": None,
+        "max_memory_per_agent": "64Gi",
+        "max_cpu_per_agent": "32",
+        "max_tokens_per_month": None,
+        "token_enforcement": False,
+        "price_monthly": None,
     },
 }
 
@@ -120,12 +125,25 @@ async def upgrade_plan(
 
     tenant, _role = await get_user_tenant(tenant_name, current_user, db, min_role="owner")
 
+    old_plan = tenant.plan
     tenant.plan = plan
-    await db.commit()
+    await db.flush()
+
+    # Update K8s ResourceQuota and LimitRange
+    try:
+        await k8s_client.update_resource_quota(tenant_name, plan)
+        await k8s_client.update_limit_range(tenant_name, plan)
+        await db.commit()
+    except Exception as e:
+        # Rollback DB change if K8s update fails
+        tenant.plan = old_plan
+        await db.commit()
+        raise HTTPException(status_code=500, detail=f"Failed to update K8s resources: {str(e)}")
 
     return {
         "tenant": tenant.name,
+        "old_plan": old_plan,
         "new_plan": plan,
         "limits": PLAN_LIMITS[plan],
-        "message": "Plan upgraded successfully",
+        "message": f"Plan changed from {old_plan} to {plan}. K8s resources updated.",
     }

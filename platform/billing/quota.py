@@ -9,12 +9,12 @@ except ImportError:
     from models import DailyUsage
 
 
-# Plan limits (tokens per month)
+# Plan limits (tokens per month) — counting only, no enforcement
 PLAN_LIMITS = {
     "free": 100_000,  # 100K tokens
-    "starter": 1_000_000,  # 1M tokens
     "pro": 10_000_000,  # 10M tokens
     "enterprise": None,  # Unlimited
+    "unlimited": None,  # Unlimited
 }
 
 
@@ -34,7 +34,7 @@ class QuotaStatus:
         self.current_usage = current_usage
         self.limit = limit
         self.percentage_used = percentage_used
-        self.is_over_quota = limit is not None and current_usage >= limit
+        self.is_over_quota = False  # Token counting only, no enforcement
         self.is_warning = limit is not None and percentage_used >= 80.0
 
     def to_dict(self) -> Dict:
@@ -90,16 +90,6 @@ async def check_quota(
 async def check_quota_before_usage(
     session: AsyncSession, tenant: str, plan: str, estimated_tokens: int
 ) -> bool:
-    """Check if usage is allowed before making an API call."""
-    quota_status = await check_quota(session, tenant, plan)
-
-    if quota_status.is_over_quota:
-        return False
-
-    # Check if adding estimated tokens would exceed limit
-    if quota_status.limit is not None:
-        projected_usage = quota_status.current_usage + estimated_tokens
-        if projected_usage > quota_status.limit:
-            return False
-
+    """Check if usage is allowed before making an API call.
+    Currently always returns True — token counting only, no enforcement."""
     return True

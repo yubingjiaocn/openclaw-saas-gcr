@@ -123,6 +123,39 @@ class K8sClient:
                 return {"status": "exists", "name": limit_obj["metadata"]["name"]}
             raise
 
+    async def update_resource_quota(self, tenant_name: str, plan: str) -> dict:
+        """Update ResourceQuota for a tenant namespace when plan changes"""
+        await self.initialize()
+        quota_yaml = self.render_template("resource_quota.yaml", tenant_name=tenant_name, plan=plan)
+        quota_obj = yaml.safe_load(quota_yaml)
+        ns = f"tenant-{tenant_name}"
+        try:
+            result = await self._core_v1.replace_namespaced_resource_quota(
+                name="tenant-quota", namespace=ns, body=quota_obj
+            )
+            return {"status": "updated", "name": result.metadata.name}
+        except client.exceptions.ApiException as e:
+            if e.status == 404:
+                # Doesn't exist yet, create it
+                return await self.create_resource_quota(tenant_name, plan)
+            raise
+
+    async def update_limit_range(self, tenant_name: str, plan: str) -> dict:
+        """Update LimitRange for a tenant namespace when plan changes"""
+        await self.initialize()
+        limit_yaml = self.render_template("limit_range.yaml", tenant_name=tenant_name, plan=plan)
+        limit_obj = yaml.safe_load(limit_yaml)
+        ns = f"tenant-{tenant_name}"
+        try:
+            result = await self._core_v1.replace_namespaced_limit_range(
+                name="tenant-limits", namespace=ns, body=limit_obj
+            )
+            return {"status": "updated", "name": result.metadata.name}
+        except client.exceptions.ApiException as e:
+            if e.status == 404:
+                return await self.create_limit_range(tenant_name, plan)
+            raise
+
     # ─── Secrets ───
 
     async def create_secret(self, tenant_name: str, secret_name: str, data: Dict[str, str]) -> dict:
@@ -175,9 +208,9 @@ class K8sClient:
         """Create OpenClawInstance CRD + agent-keys secret.
 
         LLM provider options:
+        - openai-compatible: User provides OPENAI_API_KEY + OPENAI_BASE_URL
         - openai: User provides OPENAI_API_KEY
         - anthropic: User provides ANTHROPIC_API_KEY
-        - openai-compatible: User provides OPENAI_API_KEY + OPENAI_BASE_URL
         """
         from api.models.agent import LLM_PROVIDERS
 
@@ -206,6 +239,7 @@ class K8sClient:
         # 2) Build openclaw.json config
         #    - For providers with env var auth (openai, anthropic): just set model name
         model_prefix = {
+            "bedrock": f"amazon-bedrock/{model}",
             "openai": model,
             "anthropic": model,
             "openai-compatible": model,
@@ -221,7 +255,7 @@ class K8sClient:
             },
         }
 
-        # Add provider-specific config
+        # Add provider-specific config (e.g., Bedrock needs explicit provider block)
         provider_config = provider_def["config_builder"](model)
         raw_config.update(provider_config)
 
