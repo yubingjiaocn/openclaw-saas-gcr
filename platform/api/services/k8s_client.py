@@ -200,7 +200,7 @@ class K8sClient:
         self,
         tenant_name: str,
         agent_name: str,
-        llm_provider: str = "openai-compatible",
+        llm_provider: str = "bedrock-irsa",
         llm_model: Optional[str] = None,
         llm_api_keys: Optional[Dict[str, str]] = None,
         channel_config: Optional[Dict] = None,

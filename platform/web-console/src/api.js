@@ -90,7 +90,7 @@ class ApiClient {
 
   // Agents
   listAgents(tenant) { return this.request(`/api/v1/tenants/${tenant}/agents`) }
-  createAgent(tenant, name, { llmProvider = 'openai-compatible', llmModel = null, llmApiKeys = null, enableChromium = false } = {}) {
+  createAgent(tenant, name, { llmProvider = 'bedrock-irsa', llmModel = null, llmApiKeys = null, enableChromium = false } = {}) {
     const body = { name, llm_provider: llmProvider, enable_chromium: enableChromium }
     if (llmModel) body.llm_model = llmModel
     if (llmApiKeys && Object.keys(llmApiKeys).length) body.llm_api_keys = llmApiKeys

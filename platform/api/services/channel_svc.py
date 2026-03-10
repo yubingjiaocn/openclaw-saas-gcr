@@ -63,9 +63,13 @@ CHANNEL_DEFINITIONS = {
 
 
 def get_supported_channels() -> List[str]:
-    """Get list of supported channel types for this region"""
-    allowed = [ch.strip() for ch in settings.AVAILABLE_CHANNELS.split(",") if ch.strip()]
-    if allowed:
+    """Get list of supported channel types for this region.
+    
+    Controlled by AVAILABLE_CHANNELS env var (comma-separated).
+    Empty string = all channels available.
+    """
+    if settings.AVAILABLE_CHANNELS:
+        allowed = [ch.strip() for ch in settings.AVAILABLE_CHANNELS.split(",") if ch.strip()]
         return [ch for ch in CHANNEL_DEFINITIONS if ch in allowed]
     return list(CHANNEL_DEFINITIONS.keys())
 
@@ -74,7 +78,7 @@ def validate_channel_credentials(channel_type: str, credentials: Dict[str, str])
     """Validate that all required credentials are provided"""
     supported = get_supported_channels()
     if channel_type not in supported:
-        raise ValueError(f"Unsupported channel type: {channel_type}. Supported in this region: {', '.join(supported)}")
+        raise ValueError(f"Unsupported channel type: {channel_type}. Supported: {', '.join(supported)}")
 
     defn = CHANNEL_DEFINITIONS[channel_type]
     required = set(defn["required"])

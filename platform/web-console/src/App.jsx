@@ -354,7 +354,7 @@ function TenantPage() {
             <div className="agent-info">
               <span className="agent-name">{a.name}</span>
               <span className={`badge ${a.status === 'running' ? 'badge-green' : 'badge-orange'}`}>{a.status}</span>
-              <span className="badge badge-blue">{a.llm_provider || 'openai-compatible'}</span>
+              <span className="badge badge-blue">{a.llm_provider || 'bedrock-irsa'}</span>
               {a.llm_model && <span style={{color:'var(--text-secondary)', fontSize:'11px'}}>{a.llm_model}</span>}
               <div className="agent-channels">
                 {(a.channels || []).map(ch => <span key={ch} className="channel-chip">{ch}</span>)}
@@ -495,7 +495,7 @@ function AllowedEmailsCard({ tenantName, initialEmails }) {
 function CreateAgentModal({ tenantName, onClose, onSuccess, onError }) {
   const [name, setName] = useState('')
   const [providers, setProviders] = useState(null)
-  const [provider, setProvider] = useState('openai-compatible')
+  const [provider, setProvider] = useState('bedrock-irsa')
   const [model, setModel] = useState('')
   const [apiKeys, setApiKeys] = useState({})
   const [enableChromium, setEnableChromium] = useState(false)
@@ -506,7 +506,7 @@ function CreateAgentModal({ tenantName, onClose, onSuccess, onError }) {
   useState(() => {
     api.getLlmProviders().then(p => {
       setProviders(p)
-      setModel(p['openai-compatible']?.default_model || '')
+      setModel(p['bedrock-irsa']?.default_model || '')
     }).catch(e => setError(e.message))
   }, [])
 
@@ -664,7 +664,6 @@ function ChannelModal({ tenantName, agentId, agentName, onClose }) {
       setAvailableChannels(channels)
       if (channels.length > 0) setChannelType(channels[0])
     }).catch(() => {
-      // Fallback to all channels if API fails
       const fallback = ['telegram', 'feishu', 'discord', 'whatsapp']
       setAvailableChannels(fallback)
       setChannelType(fallback[0])

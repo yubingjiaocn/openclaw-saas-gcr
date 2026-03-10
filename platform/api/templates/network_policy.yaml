@@ -14,4 +14,4 @@ spec:
             matchLabels:
               kubernetes.io/metadata.name: control-plane
   egress:
-    - to: []  # Allow all egress (WebSocket to channels, external LLM APIs, S3)
+    - to: []  # Allow all egress (WebSocket to channels, Bedrock, S3)
