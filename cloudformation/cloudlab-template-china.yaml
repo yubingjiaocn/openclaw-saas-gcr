@@ -558,8 +558,8 @@ Resources:
   ClusterSGIngressFromVPC:
     Type: AWS::EC2::SecurityGroupIngress
     Properties:
-      GroupId: !Ref ClusterSecurityGroup
-      Description: Allow all traffic from VPC CIDR
+      GroupId: !GetAtt EKSCluster.ClusterSecurityGroupId
+      Description: Allow all traffic from VPC CIDR (applies to EKS-managed cluster SG on nodes)
       IpProtocol: "-1"
       CidrIp: !Ref VpcCIDR
 
