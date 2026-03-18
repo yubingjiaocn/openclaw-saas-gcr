@@ -86,27 +86,32 @@ OPERATOR_VERSION="${OPERATOR_VERSION:-0.20.0}"
 OPERATOR_IMAGE="${OPERATOR_IMAGE:-public.ecr.aws/i4x4j7g8/openclaw-saas/openclaw-operator}"
 OPERATOR_TAG="${OPERATOR_TAG:-v0.20.0}"
 
+OPERATOR_NS="${OPERATOR_NS:-openclaw-operator-system}"
+
 echo ""
 echo ">>> [4/5] Extracting & applying CRD from Helm chart..."
 helm template openclaw-operator "$OPERATOR_CHART" \
   --version "$OPERATOR_VERSION" \
+  --namespace "$OPERATOR_NS" \
   --show-only templates/crds/openclaw.rocks_openclawinstances.yaml | \
   kubectl apply --server-side --force-conflicts -f -
 
 echo ""
 echo ">>> [5/5] Deploying OpenClaw Operator..."
+kubectl create namespace "$OPERATOR_NS" 2>/dev/null || true
 helm template openclaw-operator "$OPERATOR_CHART" \
   --version "$OPERATOR_VERSION" \
+  --namespace "$OPERATOR_NS" \
   --set image.repository="$OPERATOR_IMAGE" \
   --set image.tag="$OPERATOR_TAG" \
   --show-only templates/deployment.yaml \
   --show-only templates/serviceaccount.yaml \
   --show-only templates/rbac.yaml | \
-  kubectl apply --server-side --force-conflicts -f -
+  kubectl apply -n "$OPERATOR_NS" --server-side --force-conflicts -f -
 
 echo ""
 echo ">>> Waiting for operator to be ready..."
-kubectl rollout status deployment/openclaw-operator -n openclaw-operator-system --timeout=120s
+kubectl rollout status deployment/openclaw-operator -n "$OPERATOR_NS" --timeout=120s
 
 echo ""
 echo "============================================"
