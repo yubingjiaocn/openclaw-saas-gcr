@@ -37,37 +37,34 @@ echo "  EFS: $EFS_FILE_SYSTEM_ID"
 echo ">>> Configuring kubectl..."
 aws eks update-kubeconfig --name "$CLUSTER_NAME" --region "$REGION"
 
-# 1. EFS CSI Driver
+# 1. EFS CSI Driver (via EKS Addon — works in CN without external Helm repos)
 echo ""
-echo ">>> [1/5] Installing EFS CSI Driver..."
-helm repo add aws-efs-csi-driver https://kubernetes-sigs.github.io/aws-efs-csi-driver/ || true
-helm repo update aws-efs-csi-driver
-helm upgrade --install aws-efs-csi-driver \
-  aws-efs-csi-driver/aws-efs-csi-driver \
-  --namespace kube-system \
-  --version 3.4.1 \
-  --set controller.serviceAccount.create=true \
-  --set controller.serviceAccount.name=efs-csi-controller-sa \
-  --wait --timeout 5m
-
-# EFS CSI Pod Identity
-echo ">>> Creating EFS CSI Pod Identity Association..."
-aws eks create-pod-identity-association \
+echo ">>> [1/5] Installing EFS CSI Driver (EKS Addon)..."
+aws eks create-addon \
   --cluster-name "$CLUSTER_NAME" \
-  --namespace kube-system \
-  --service-account efs-csi-controller-sa \
-  --role-arn "$EFS_CSI_DRIVER_ROLE_ARN" \
-  --region "$REGION" 2>/dev/null || echo "  (already exists)"
+  --addon-name aws-efs-csi-driver \
+  --resolve-conflicts OVERWRITE \
+  --pod-identity-associations "[{\"serviceAccount\":\"efs-csi-controller-sa\",\"roleArn\":\"$EFS_CSI_DRIVER_ROLE_ARN\"}]" \
+  --region "$REGION" 2>/dev/null || echo "  (already installed or updating)"
 
-# 2. ALB Controller
+echo "  Waiting for addon to be ACTIVE..."
+aws eks wait addon-active \
+  --cluster-name "$CLUSTER_NAME" \
+  --addon-name aws-efs-csi-driver \
+  --region "$REGION" 2>&1 || echo "  (wait timed out, checking status...)"
+aws eks describe-addon --cluster-name "$CLUSTER_NAME" --addon-name aws-efs-csi-driver \
+  --region "$REGION" --query 'addon.{Status:status,Version:addonVersion}' --output table
+
+# 2. ALB Controller (OCI chart from public.ecr.aws — no GitHub repo access needed)
+ALB_CHART="${ALB_CHART:-oci://public.ecr.aws/i4x4j7g8/openclaw-saas/charts/aws-load-balancer-controller}"
+ALB_VERSION="${ALB_VERSION:-3.1.0}"
+
 echo ""
 echo ">>> [2/5] Installing ALB Controller..."
-helm repo add eks https://aws.github.io/eks-charts || true
-helm repo update eks
 helm upgrade --install aws-load-balancer-controller \
-  eks/aws-load-balancer-controller \
+  "$ALB_CHART" \
   --namespace kube-system \
-  --version 3.1.0 \
+  --version "$ALB_VERSION" \
   --set clusterName="$CLUSTER_NAME" \
   --set serviceAccount.create=true \
   --set serviceAccount.name=aws-load-balancer-controller \
