@@ -95,6 +95,63 @@ echo ""
 echo ">>> Waiting for operator to be ready..."
 kubectl rollout status deployment/openclaw-operator -n openclaw-operator-system --timeout=120s
 
+# 6. Pre-pull & retag images that operator hardcodes (nginx, uv)
+# CN cannot reach docker.io or ghcr.io. We pull from public.ecr.aws and
+# tag them as the names the operator expects, so kubelet finds them locally.
+echo ""
+echo ">>> [6/6] Pre-pulling operator-injected images on all nodes..."
+cat <<'RETAG_EOF' | kubectl apply -f -
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: cn-image-prepull
+  namespace: kube-system
+  labels:
+    app: cn-image-prepull
+spec:
+  selector:
+    matchLabels:
+      app: cn-image-prepull
+  template:
+    metadata:
+      labels:
+        app: cn-image-prepull
+    spec:
+      hostPID: true
+      tolerations:
+      - operator: Exists
+      containers:
+      - name: prepull
+        image: public.ecr.aws/i4x4j7g8/openclaw-saas/busybox:1.37.0
+        securityContext:
+          privileged: true
+        command: ["nsenter", "-t", "1", "-m", "-u", "-i", "-n", "--", "sh", "-c"]
+        args:
+        - |
+          echo "=== Pulling and retagging images ==="
+          # nginx (operator injects as docker.io/library/nginx:1.27-alpine)
+          ctr -n k8s.io images pull public.ecr.aws/i4x4j7g8/openclaw-saas/nginx:1.27-alpine 2>&1
+          ctr -n k8s.io images tag --force public.ecr.aws/i4x4j7g8/openclaw-saas/nginx:1.27-alpine docker.io/library/nginx:1.27-alpine 2>&1
+          echo "nginx done"
+          # uv (operator injects as ghcr.io/astral-sh/uv:0.6-bookworm-slim)
+          ctr -n k8s.io images pull public.ecr.aws/i4x4j7g8/openclaw-saas/uv:0.6-bookworm-slim 2>&1
+          ctr -n k8s.io images tag --force public.ecr.aws/i4x4j7g8/openclaw-saas/uv:0.6-bookworm-slim ghcr.io/astral-sh/uv:0.6-bookworm-slim 2>&1
+          echo "uv done"
+          echo "=== All images ready ==="
+          sleep 3600
+RETAG_EOF
+
+echo "  Waiting for DaemonSet pods to be ready..."
+kubectl rollout status daemonset/cn-image-prepull -n kube-system --timeout=120s
+
+# Wait for retag to finish (check logs)
+sleep 10
+echo "  Checking retag results..."
+for pod in $(kubectl get pods -n kube-system -l app=cn-image-prepull -o name); do
+  echo "--- $pod ---"
+  kubectl logs -n kube-system "$pod" --tail=5
+done
+
 echo ""
 echo "============================================"
 echo "  Step 2 Complete!"
