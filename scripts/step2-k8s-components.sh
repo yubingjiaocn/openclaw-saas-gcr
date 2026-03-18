@@ -89,11 +89,16 @@ OPERATOR_TAG="${OPERATOR_TAG:-v0.20.0}"
 OPERATOR_NS="${OPERATOR_NS:-openclaw-operator-system}"
 
 echo ""
-echo ">>> [4/5] Extracting & applying CRD from Helm chart..."
+echo ">>> [4/5] Extracting & applying CRDs from Helm chart..."
 helm template openclaw-operator "$OPERATOR_CHART" \
   --version "$OPERATOR_VERSION" \
   --namespace "$OPERATOR_NS" \
   --show-only templates/crds/openclaw.rocks_openclawinstances.yaml | \
+  kubectl apply --server-side --force-conflicts -f -
+helm template openclaw-operator "$OPERATOR_CHART" \
+  --version "$OPERATOR_VERSION" \
+  --namespace "$OPERATOR_NS" \
+  --show-only templates/crds/openclaw.rocks_openclawselfconfigs.yaml | \
   kubectl apply --server-side --force-conflicts -f -
 
 echo ""
