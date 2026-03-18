@@ -83,8 +83,12 @@ cat "$SCRIPT_DIR/../yaml/storage-classes.yaml" | \
 # 4. OpenClaw Operator CRD + Deployment (static yaml, images from public.ecr.aws)
 echo ""
 echo ">>> [4/5] Applying OpenClaw CRDs..."
-kubectl apply --server-side --force-conflicts -f "$SCRIPT_DIR/../yaml/openclaw-crd.yaml"
+echo "  Applying OpenClawInstance CRD (large file, may take a moment)..."
+kubectl apply --server-side --force-conflicts --timeout=120s -f "$SCRIPT_DIR/../yaml/openclaw-crd.yaml"
 kubectl apply --server-side --force-conflicts -f "$SCRIPT_DIR/../yaml/openclaw-selfconfig-crd.yaml"
+# Verify both CRDs exist
+echo "  Verifying CRDs..."
+kubectl get crd openclawinstances.openclaw.rocks openclawselfconfigs.openclaw.rocks
 
 echo ""
 echo ">>> [5/5] Deploying OpenClaw Operator..."
