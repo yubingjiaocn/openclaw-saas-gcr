@@ -45,33 +45,8 @@ class Settings(BaseSettings):
 
     METRICS_EXPORTER_TAG: str = os.getenv("METRICS_EXPORTER_TAG", "v0.1.0")
 
-    # Agent image settings (override for CN region or custom registries)
-    # Default: ghcr.io (works globally). Set ECR_REGISTRY for CN or private registries.
-    OPENCLAW_IMAGE_REPO: str = os.getenv("OPENCLAW_IMAGE_REPO", "")  # e.g. "735091234506.dkr.ecr.cn-northwest-1.amazonaws.com.cn/openclaw"
-    OPENCLAW_IMAGE_TAG: str = os.getenv("OPENCLAW_IMAGE_TAG", "latest")
-    CHROMIUM_IMAGE_REPO: str = os.getenv("CHROMIUM_IMAGE_REPO", "")
-    CHROMIUM_IMAGE_TAG: str = os.getenv("CHROMIUM_IMAGE_TAG", "latest")
-
     # Available channels for this region (comma-separated, empty = all)
     AVAILABLE_CHANNELS: str = os.getenv("AVAILABLE_CHANNELS", "")
-
-    @property
-    def openclaw_image_repository(self) -> str:
-        """OpenClaw agent image repo. Falls back to ECR_REGISTRY/openclaw, then ghcr.io default."""
-        if self.OPENCLAW_IMAGE_REPO:
-            return self.OPENCLAW_IMAGE_REPO
-        if self.ECR_REGISTRY and "ghcr.io" not in self.ECR_REGISTRY:
-            return f"{self.ECR_REGISTRY}/openclaw"
-        return ""  # empty = let operator use its default (ghcr.io/openclaw/openclaw)
-
-    @property
-    def chromium_image_repository(self) -> str:
-        """Chromium sidecar image repo. Falls back to ECR_REGISTRY/chromium, then operator default."""
-        if self.CHROMIUM_IMAGE_REPO:
-            return self.CHROMIUM_IMAGE_REPO
-        if self.ECR_REGISTRY and "ghcr.io" not in self.ECR_REGISTRY:
-            return f"{self.ECR_REGISTRY}/chromium"
-        return ""  # empty = let operator use its default
 
     @property
     def ecr_domain(self) -> str:
