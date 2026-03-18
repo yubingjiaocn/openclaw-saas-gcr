@@ -145,8 +145,8 @@ spec:
           ctr -n k8s.io images pull public.ecr.aws/i4x4j7g8/openclaw-saas/tailscale:2026.03.18 2>&1
           ctr -n k8s.io images tag --force public.ecr.aws/i4x4j7g8/openclaw-saas/tailscale:2026.03.18 ghcr.io/tailscale/tailscale:latest 2>&1
           echo "tailscale done"
-          # metrics-exporter (platform API generates as openclaw-metrics-exporter)
-          ctr -n k8s.io images pull public.ecr.aws/i4x4j7g8/openclaw-saas/openclaw-metrics-exporter:v0.1.0 2>&1
+          # metrics-exporter (platform API code generates image name as openclaw-saas-dev-metrics-exporter)
+          ctr -n k8s.io images pull public.ecr.aws/i4x4j7g8/openclaw-saas/openclaw-saas-dev-metrics-exporter:v0.1.0 2>&1
           echo "metrics-exporter done"
           # openclaw agent image (CRD default)
           ctr -n k8s.io images pull public.ecr.aws/i4x4j7g8/openclaw-saas/openclaw:2026.3.1 2>&1
