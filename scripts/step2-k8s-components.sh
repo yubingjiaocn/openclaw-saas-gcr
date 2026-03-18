@@ -83,15 +83,29 @@ cat "$SCRIPT_DIR/../yaml/storage-classes.yaml" | \
   sed "s/\${EFS_FILE_SYSTEM_ID}/$EFS_FILE_SYSTEM_ID/g" | \
   kubectl apply --server-side --force-conflicts -f -
 
-# 4. OpenClaw Operator CRD
-echo ""
-echo ">>> [4/5] Applying OpenClaw CRD..."
-kubectl apply --server-side --force-conflicts -f "$SCRIPT_DIR/../yaml/openclaw-crd.yaml"
+# 4. OpenClaw Operator (Helm — includes CRD + Deployment + RBAC)
+OPERATOR_CHART="${OPERATOR_CHART:-oci://ghcr.io/openclaw-rocks/charts/openclaw-operator}"
+OPERATOR_VERSION="${OPERATOR_VERSION:-0.20.0}"
+OPERATOR_IMAGE="${OPERATOR_IMAGE:-public.ecr.aws/i4x4j7g8/openclaw-saas/openclaw-operator}"
+OPERATOR_TAG="${OPERATOR_TAG:-v0.20.0}"
 
-# 5. OpenClaw Operator
+echo ""
+echo ">>> [4/5] Extracting & applying CRD from Helm chart..."
+helm template openclaw-operator "$OPERATOR_CHART" \
+  --version "$OPERATOR_VERSION" \
+  --show-only templates/crds/openclaw.rocks_openclawinstances.yaml | \
+  kubectl apply --server-side --force-conflicts -f -
+
 echo ""
 echo ">>> [5/5] Deploying OpenClaw Operator..."
-kubectl apply --server-side --force-conflicts -f "$SCRIPT_DIR/../yaml/openclaw-operator.yaml"
+helm template openclaw-operator "$OPERATOR_CHART" \
+  --version "$OPERATOR_VERSION" \
+  --set image.repository="$OPERATOR_IMAGE" \
+  --set image.tag="$OPERATOR_TAG" \
+  --show-only templates/deployment.yaml \
+  --show-only templates/serviceaccount.yaml \
+  --show-only templates/rbac.yaml | \
+  kubectl apply --server-side --force-conflicts -f -
 
 echo ""
 echo ">>> Waiting for operator to be ready..."
