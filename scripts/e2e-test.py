@@ -10,7 +10,7 @@ import time
 from playwright.sync_api import sync_playwright, expect
 
 BASE_URL = "http://localhost:8890"
-ADMIN_EMAIL = "admin@openclaw.cn"
+ADMIN_EMAIL = "chenxqdu@amazon.com"
 ADMIN_PASSWORD = "OpenClaw2026!"
 TEST_TENANT = "e2e-test"
 
