@@ -312,6 +312,11 @@ class K8sClient:
                 },
             },
             "spec": {
+                **({"image": {
+                    "repository": settings.openclaw_image_repository,
+                    "tag": settings.OPENCLAW_IMAGE_TAG,
+                    "pullPolicy": "IfNotPresent",
+                }} if settings.openclaw_image_repository else {}),
                 "envFrom": [{"secretRef": {"name": f"{agent_name}-keys"}}],
                 "env": [{"name": "NODE_OPTIONS", "value": "--max-old-space-size=1536"}],
                 "config": {
@@ -321,6 +326,10 @@ class K8sClient:
                 "storage": {"persistence": {"enabled": True, "size": "10Gi"}},
                 "chromium": {
                     "enabled": enable_chromium,
+                    **({"image": {
+                        "repository": settings.chromium_image_repository,
+                        "tag": settings.CHROMIUM_IMAGE_TAG,
+                    }} if settings.chromium_image_repository else {}),
                     **({"extraEnv": [
                         {"name": "TIMEOUT", "value": "300000"},
                         {"name": "CONNECTION_TIMEOUT", "value": "120000"},

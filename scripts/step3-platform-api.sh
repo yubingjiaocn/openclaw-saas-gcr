@@ -11,7 +11,10 @@ STACK_NAME="${STACK_NAME:-openclaw-cn-workshop}"
 REGION="${REGION:-cn-northwest-1}"
 ADMIN_EMAIL="${ADMIN_EMAIL:-chenxqdu@amazon.com}"
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-OpenClaw2026!}"
-PLATFORM_IMAGE="${PLATFORM_IMAGE:-public.ecr.aws/i4x4j7g8/openclaw-saas/platform:v0.9.17}"
+
+# CN ECR registry (same account, region-local — fast pulls)
+CN_ECR_REGISTRY="${CN_ECR_REGISTRY:-735091234506.dkr.ecr.cn-northwest-1.amazonaws.com.cn}"
+PLATFORM_IMAGE="${PLATFORM_IMAGE:-${CN_ECR_REGISTRY}/openclaw-saas-dev-platform:v0.9.19}"
 PLATFORM_REPLICAS="${PLATFORM_REPLICAS:-2}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -94,7 +97,9 @@ kubectl create secret generic platform-config \
   --from-literal="AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)" \
   --from-literal="AWS_PARTITION=aws-cn" \
   --from-literal="AWS_REGION=$REGION" \
-  --from-literal="ECR_REGISTRY=public.ecr.aws/i4x4j7g8/openclaw-saas" \
+  --from-literal="ECR_REGISTRY=$CN_ECR_REGISTRY" \
+  --from-literal="OPENCLAW_IMAGE_TAG=2026.3.1" \
+  --from-literal="CHROMIUM_IMAGE_TAG=2026.03.17" \
   --from-literal="JWT_SECRET=$JWT_SECRET" \
   --from-literal="METRICS_EXPORTER_TAG=v0.1.0" \
   --from-literal="SQS_QUEUE_URL=$SQS_QUEUE_URL" \
