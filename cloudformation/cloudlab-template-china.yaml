@@ -535,6 +535,16 @@ Resources:
         - Key: karpenter.sh/discovery
           Value: !Ref ClusterName
 
+  ClusterSGIngressFromIde:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref ClusterSecurityGroup
+      Description: Allow IDE to access EKS API server
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      SourceSecurityGroupId: !Ref IdeSecurityGroup
+
   EKSCluster:
     Type: AWS::EKS::Cluster
     Properties:
