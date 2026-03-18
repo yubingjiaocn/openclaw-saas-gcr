@@ -138,12 +138,12 @@ if [ "$KUBECTL_OK" = "true" ]; then
     echo "  (dry-run) delete operator deployment, RBAC, namespace"
   fi
 
-  # CRD
-  log "[2.2] Deleting OpenClaw CRD..."
+  # CRDs
+  log "[2.2] Deleting OpenClaw CRDs..."
   if [ "$DRY_RUN" != "true" ]; then
-    kubectl delete crd openclawinstances.openclaw.rocks --ignore-not-found --timeout=60s 2>/dev/null || true
+    kubectl delete crd openclawinstances.openclaw.rocks openclawselfconfigs.openclaw.rocks --ignore-not-found --timeout=60s 2>/dev/null || true
   else
-    echo "  (dry-run) kubectl delete crd openclawinstances.openclaw.rocks"
+    echo "  (dry-run) kubectl delete crd openclawinstances.openclaw.rocks openclawselfconfigs.openclaw.rocks"
   fi
 
   # StorageClasses

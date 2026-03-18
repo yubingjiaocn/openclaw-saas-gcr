@@ -84,6 +84,7 @@ cat "$SCRIPT_DIR/../yaml/storage-classes.yaml" | \
 echo ""
 echo ">>> [4/5] Applying OpenClaw CRDs..."
 kubectl apply --server-side --force-conflicts -f "$SCRIPT_DIR/../yaml/openclaw-crd.yaml"
+kubectl apply --server-side --force-conflicts -f "$SCRIPT_DIR/../yaml/openclaw-selfconfig-crd.yaml"
 
 echo ""
 echo ">>> [5/5] Deploying OpenClaw Operator..."
