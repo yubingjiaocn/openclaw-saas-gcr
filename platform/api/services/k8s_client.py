@@ -330,6 +330,13 @@ class K8sClient:
                     "requests": {"cpu": "250m", "memory": "1Gi"},
                     "limits": {"cpu": "1", "memory": "2Gi"},
                 },
+                "security": {
+                    "containerSecurityContext": {
+                        "readOnlyRootFilesystem": False,
+                        "runAsNonRoot": False,
+                        "runAsUser": 0,
+                    },
+                },
                 # Metrics exporter sidecar - reads JSONL from shared PVC
                 "sidecars": [
                     {
