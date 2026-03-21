@@ -1,4 +1,5 @@
 """Kubernetes client for managing resources"""
+import json
 import os
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -303,20 +304,26 @@ class K8sClient:
         if channel_config:
             raw_config["channels"] = channel_config
 
-        # ACP configuration: enable acpx plugin with explicit command path and allow agents
+        # ACP + Kiro configuration (ref: setup-kiro.sh)
         raw_config["plugins"] = raw_config.get("plugins", {})
         raw_config["plugins"]["entries"] = raw_config["plugins"].get("entries", {})
         raw_config["plugins"]["entries"]["acpx"] = {
             "enabled": True,
             "config": {
-                "command": "/usr/local/bin/acpx",
-                "expectedVersion": "any",
                 "permissionMode": "approve-all",
+                "nonInteractivePermissions": "deny",
             },
         }
         raw_config["acp"] = {
+            "enabled": True,
+            "backend": "acpx",
             "defaultAgent": "kiro",
             "allowedAgents": ["kiro", "codex", "claude", "gemini", "opencode"],
+            "maxConcurrentSessions": 8,
+            "runtime": {"ttlMinutes": 120},
+        }
+        raw_config["tools"] = {
+            "exec": {"security": "full", "ask": "off"},
         }
 
         # 3) Build CRD body
@@ -346,6 +353,21 @@ class K8sClient:
                     "raw": raw_config,
                 },
                 "storage": {"persistence": {"enabled": True, "size": "50Gi"}},
+                # Seed .acpxrc.json into workspace so acpx can find kiro agent config.
+                # This is the project-level config; acpx reads it when cwd is the workspace.
+                # Global ~/.acpx/config.json is NOT accessible because operator creates
+                # /home/openclaw as root:root and the PVC only covers .openclaw/ subdirectory.
+                "workspace": {
+                    "initialFiles": {
+                        ".acpxrc.json": json.dumps({
+                            "defaultAgent": "kiro",
+                            "agents": {
+                                "kiro": {"command": "kiro-cli acp --trust-all-tools"},
+                            },
+                        }),
+                        "KIRO-PLAYBOOK.md": "# Kiro Playbook\n\nSee /home/node/.openclaw/workspace/KIRO-PLAYBOOK.md (baked into image)",
+                    },
+                },
                 "chromium": {
                     "enabled": enable_chromium,
                     **({"extraEnv": [

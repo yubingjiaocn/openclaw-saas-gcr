@@ -1,0 +1,6 @@
+{
+  "name": "kiro_default",
+  "tools": ["read", "write", "shell", "aws", "report", "introspect", "knowledge", "thinking", "todo", "delegate", "grep", "glob"],
+  "includeMcpJson": true,
+  "model": "auto"
+}
