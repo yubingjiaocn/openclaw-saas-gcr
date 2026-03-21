@@ -246,6 +246,7 @@ class K8sClient:
         model_prefix = {
             "bedrock": f"amazon-bedrock/{model}",
             "bedrock-irsa": f"amazon-bedrock/{model}",
+            "bedrock-apikey": f"amazon-bedrock/{model}",
             "openai": model,
             "anthropic": model,
             "openai-compatible": f"custom/{model}",
@@ -282,6 +283,13 @@ class K8sClient:
                 }
             }
             raw_config["agents"]["defaults"]["model"]["primary"] = f"custom/{model_id}"
+
+        # Bedrock API Key: override region in baseUrl from user-supplied AWS_DEFAULT_REGION
+        if llm_provider == "bedrock-apikey" and llm_api_keys:
+            region = llm_api_keys.get("AWS_DEFAULT_REGION", "us-west-2")
+            raw_config["models"]["providers"]["amazon-bedrock"]["baseUrl"] = (
+                f"https://bedrock-runtime.{region}.amazonaws.com"
+            )
 
         # Browser config: when Chromium sidecar is enabled, configure CDP connection
         # Use a custom profile name (not "openclaw" which is auto-managed and tries to launch)
