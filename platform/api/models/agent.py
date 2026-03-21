@@ -131,6 +131,35 @@ LLM_PROVIDERS = {
         ],
         "config_builder": lambda model: {},  # Built dynamically in k8s_client
     },
+    "bedrock-apikey": {
+        "name": "AWS Bedrock (API Key)",
+        "env_keys": ["AWS_BEARER_TOKEN_BEDROCK"],
+        "optional_keys": ["AWS_DEFAULT_REGION"],
+        "default_model": "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
+        "models": [
+            {"id": "global.anthropic.claude-opus-4-6-v1", "name": "Claude Opus 4.6"},
+            {"id": "global.anthropic.claude-sonnet-4-6", "name": "Claude Sonnet 4.6"},
+            {"id": "global.anthropic.claude-sonnet-4-5-20250929-v1:0", "name": "Claude Sonnet 4.5"},
+            {"id": "global.anthropic.claude-sonnet-4-20250514-v1:0", "name": "Claude Sonnet 4"},
+            {"id": "deepseek.v3.2", "name": "DeepSeek V3.2"},
+            {"id": "minimax.minimax-m2.1", "name": "MiniMax M2.1"},
+            {"id": "moonshotai.kimi-k2.5", "name": "Kimi K2.5"},
+        ],
+        "config_builder": lambda model: {
+            "models": {
+                "providers": {
+                    "amazon-bedrock": {
+                        "baseUrl": "https://bedrock-runtime.us-west-2.amazonaws.com",
+                        "auth": "aws-sdk",
+                        "api": "bedrock-converse-stream",
+                        "models": [
+                            {"id": model, "name": model, "input": ["text", "image"], "contextWindow": 200000, "maxTokens": 8192},
+                        ],
+                    }
+                }
+            }
+        },
+    },
 }
 
 

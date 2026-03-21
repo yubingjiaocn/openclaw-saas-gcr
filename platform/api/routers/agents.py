@@ -115,6 +115,7 @@ async def list_llm_providers():
         result[key] = {
             "name": defn["name"],
             "required_keys": defn["env_keys"],
+            "optional_keys": defn.get("optional_keys", []),
             "default_model": defn["default_model"],
             "models": defn["models"],
         }
