@@ -329,7 +329,7 @@ class K8sClient:
                     "mergeMode": "merge",
                     "raw": raw_config,
                 },
-                "storage": {"persistence": {"enabled": True, "size": "10Gi"}},
+                "storage": {"persistence": {"enabled": True, "size": "50Gi"}},
                 "chromium": {
                     "enabled": enable_chromium,
                     **({"extraEnv": [

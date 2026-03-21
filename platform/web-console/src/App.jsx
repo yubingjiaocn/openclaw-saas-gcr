@@ -1061,7 +1061,7 @@ function PlansPage() {
         memoryPerAgent: '4 Gi',
         totalCpu: '4 vCPU',
         totalMemory: '8 Gi',
-        storage: '10 Gi per agent',
+        storage: '50 Gi per agent',
         channels: 'All (Telegram, Discord, Feishu, WhatsApp)',
         support: 'Community',
       },
@@ -1082,7 +1082,7 @@ function PlansPage() {
         memoryPerAgent: '4 Gi',
         totalCpu: '24 vCPU',
         totalMemory: '48 Gi',
-        storage: '10 Gi per agent',
+        storage: '50 Gi per agent',
         channels: 'All (Telegram, Discord, Feishu, WhatsApp)',
         support: 'Email',
       },
@@ -1103,7 +1103,7 @@ function PlansPage() {
         memoryPerAgent: '4 Gi',
         totalCpu: '120 vCPU',
         totalMemory: '240 Gi',
-        storage: '10 Gi per agent',
+        storage: '50 Gi per agent',
         channels: 'All + Custom integrations',
         support: 'Priority + Slack',
       },
@@ -1229,7 +1229,7 @@ function PlansPage() {
       <div style={{ textAlign: 'center', marginTop: 16, color: 'var(--text-secondary)', fontSize: 13 }}>
         <p>💡 Token counting is enabled on all plans but currently <strong>not enforced</strong> — you won't be cut off if you exceed the limit.</p>
         <p style={{ marginTop: 4, fontSize: 12 }}>
-          Each agent runs as a dedicated pod with its own CPU, memory, and 10Gi persistent storage.
+          Each agent runs as a dedicated pod with its own CPU, memory, and 50Gi persistent storage.
           Total CPU/Memory quota is the cluster-wide limit for all your agents combined.
         </p>
         <p style={{ marginTop: 8 }}>
