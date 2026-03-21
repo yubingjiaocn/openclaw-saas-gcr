@@ -12,7 +12,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # ── Kiro CLI (native binary, headless, aarch64) ──
-# Download pinned version; place in /usr/local/bin so it's on PATH for all users
 ARG KIRO_VERSION=1.28.0
 RUN set -e \
     && curl -fsSL "https://desktop-release.q.us-east-1.amazonaws.com/${KIRO_VERSION}/kirocli-aarch64-linux.tar.gz" \
@@ -28,12 +27,20 @@ RUN set -e \
 RUN npm install -g acpx@latest \
     && acpx --version
 
+# ── Custom entrypoint: fix home dir permissions before starting OpenClaw ──
+# The k8s-operator creates /home/openclaw as root:root for the PVC mount.
+# We need node (uid 1000) to write ~/.acpx, ~/.cache, etc.
+COPY docker-entrypoint-custom.sh /usr/local/bin/docker-entrypoint-custom.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint-custom.sh
+
 # ── Back to non-root user ──
-# OpenClaw base image runs as 'node' (uid 1000)
 USER node
 
 # Verify tools are accessible
 RUN kiro-cli --version && acpx --version && jq --version
+
+ENTRYPOINT ["docker-entrypoint-custom.sh"]
+CMD ["node", "openclaw.mjs", "gateway", "--allow-unconfigured"]
 
 # ── Labels ──
 LABEL org.opencontainers.image.title="openclaw-custom" \

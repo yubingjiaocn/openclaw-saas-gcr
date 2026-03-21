@@ -303,6 +303,22 @@ class K8sClient:
         if channel_config:
             raw_config["channels"] = channel_config
 
+        # ACP configuration: enable acpx plugin with explicit command path and allow agents
+        raw_config["plugins"] = raw_config.get("plugins", {})
+        raw_config["plugins"]["entries"] = raw_config["plugins"].get("entries", {})
+        raw_config["plugins"]["entries"]["acpx"] = {
+            "enabled": True,
+            "config": {
+                "command": "/usr/local/bin/acpx",
+                "expectedVersion": "any",
+                "permissionMode": "approve-all",
+            },
+        }
+        raw_config["acp"] = {
+            "defaultAgent": "kiro",
+            "allowedAgents": ["kiro", "codex", "claude", "gemini", "opencode"],
+        }
+
         # 3) Build CRD body
         sqs_queue_url = settings.sqs_url
         body = {
@@ -340,13 +356,6 @@ class K8sClient:
                 "resources": {
                     "requests": {"cpu": "500m", "memory": "2Gi"},
                     "limits": {"cpu": "2", "memory": "4Gi"},
-                },
-                "security": {
-                    "containerSecurityContext": {
-                        "readOnlyRootFilesystem": False,
-                        "runAsNonRoot": False,
-                        "runAsUser": 0,
-                    },
                 },
                 # Metrics exporter sidecar - reads JSONL from shared PVC
                 "sidecars": [
