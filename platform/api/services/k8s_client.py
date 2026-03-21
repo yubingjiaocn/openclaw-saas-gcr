@@ -205,12 +205,18 @@ class K8sClient:
         llm_api_keys: Optional[Dict[str, str]] = None,
         channel_config: Optional[Dict] = None,
         enable_chromium: bool = False,
+        custom_image: Optional[str] = None,
+        custom_image_tag: Optional[str] = None,
     ) -> dict:
         """Create OpenClawInstance CRD + agent-keys secret."""
         from api.models.agent import LLM_PROVIDERS
 
         await self.initialize()
         namespace = f"tenant-{tenant_name}"
+
+        # Resolve image: explicit param > platform default > operator default (ghcr.io/openclaw/openclaw)
+        effective_image = custom_image or settings.DEFAULT_AGENT_IMAGE or None
+        effective_image_tag = custom_image_tag or (settings.DEFAULT_AGENT_IMAGE_TAG if effective_image else None)
 
         provider_def = LLM_PROVIDERS.get(llm_provider)
         if not provider_def:
@@ -312,6 +318,11 @@ class K8sClient:
                 },
             },
             "spec": {
+                **({"image": {
+                    "repository": effective_image,
+                    "tag": effective_image_tag or "latest",
+                    "pullPolicy": "Always",
+                }} if effective_image else {}),
                 "envFrom": [{"secretRef": {"name": f"{agent_name}-keys"}}],
                 "env": [{"name": "NODE_OPTIONS", "value": "--max-old-space-size=1536"}],
                 "config": {

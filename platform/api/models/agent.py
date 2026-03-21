@@ -30,6 +30,8 @@ class Agent(Base):
     channels = Column(JSON, default=list, nullable=False)
     llm_provider = Column(String(50), default="bedrock", nullable=False)
     llm_model = Column(String(255), nullable=True)
+    custom_image = Column(String(512), nullable=True)
+    custom_image_tag = Column(String(128), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
@@ -141,6 +143,8 @@ class AgentCreate(BaseModel):
     llm_model: Optional[str] = Field(default=None, description="Model ID (uses provider default if not specified)")
     llm_api_keys: Optional[Dict[str, str]] = Field(default=None, description="API keys for the LLM provider")
     enable_chromium: bool = Field(default=False, description="Enable Chromium browser sidecar for web automation")
+    custom_image: Optional[str] = Field(default=None, description="Custom container image repository (e.g. public.ecr.aws/xxx/openclaw-custom)")
+    custom_image_tag: Optional[str] = Field(default=None, description="Custom container image tag (e.g. 2026.3.21). Defaults to 'latest' if custom_image is set")
     config: Optional[Dict[str, Any]] = Field(default_factory=dict)
 
 
@@ -154,6 +158,8 @@ class AgentResponse(BaseModel):
     channels: List[str]
     llm_provider: str
     llm_model: Optional[str]
+    custom_image: Optional[str] = None
+    custom_image_tag: Optional[str] = None
     created_at: datetime
 
     class Config:

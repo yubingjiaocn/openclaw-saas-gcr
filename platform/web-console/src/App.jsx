@@ -499,6 +499,9 @@ function CreateAgentModal({ tenantName, onClose, onSuccess, onError }) {
   const [model, setModel] = useState('')
   const [apiKeys, setApiKeys] = useState({})
   const [enableChromium, setEnableChromium] = useState(false)
+  const [showAdvanced, setShowAdvanced] = useState(false)
+  const [customImage, setCustomImage] = useState('')
+  const [customImageTag, setCustomImageTag] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
@@ -527,6 +530,8 @@ function CreateAgentModal({ tenantName, onClose, onSuccess, onError }) {
         llmModel: model || undefined,
         llmApiKeys: Object.keys(apiKeys).length ? apiKeys : undefined,
         enableChromium,
+        customImage: customImage.trim() || undefined,
+        customImageTag: customImageTag.trim() || undefined,
       })
       onSuccess('Agent created! Pod is starting...')
     } catch (err) {
@@ -615,6 +620,31 @@ function CreateAgentModal({ tenantName, onClose, onSuccess, onError }) {
               <input type="checkbox" checked={enableChromium} onChange={e => setEnableChromium(e.target.checked)} />
               <span>🌐 <strong>Enable Browser</strong> — adds Chromium sidecar for web automation (+500m CPU, +1Gi mem)</span>
             </label>
+          </div>
+
+          <div style={{marginBottom:'12px'}}>
+            <button type="button" className="btn btn-sm" onClick={() => setShowAdvanced(!showAdvanced)}
+              style={{fontSize:'12px', color:'var(--text-secondary)'}}>
+              {showAdvanced ? '▼' : '▶'} Advanced Options
+            </button>
+            {showAdvanced && (
+              <div style={{background:'var(--bg-secondary)', padding:'12px', borderRadius:'8px', marginTop:'8px'}}>
+                <p style={{fontSize:'12px', color:'var(--text-secondary)', marginBottom:'8px'}}>
+                  🐳 <strong>Custom Container Image</strong> — use a custom-built OpenClaw image with pre-installed tools.
+                  Leave empty to use the platform default.
+                </p>
+                <div className="form-group" style={{marginBottom:'8px'}}>
+                  <label style={{fontSize:'12px'}}>Image Repository</label>
+                  <input className="form-input" value={customImage} onChange={e => setCustomImage(e.target.value)}
+                    placeholder="e.g. public.ecr.aws/xxx/openclaw-custom" />
+                </div>
+                <div className="form-group" style={{marginBottom:'0'}}>
+                  <label style={{fontSize:'12px'}}>Image Tag</label>
+                  <input className="form-input" value={customImageTag} onChange={e => setCustomImageTag(e.target.value)}
+                    placeholder="e.g. 2026.3.21 (default: latest)" />
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="modal-actions">
