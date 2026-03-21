@@ -77,6 +77,8 @@ async def create_agent(
         channels=[],
         llm_provider=agent_data.llm_provider,
         llm_model=model,
+        custom_image=agent_data.custom_image,
+        custom_image_tag=agent_data.custom_image_tag,
     )
     db.add(agent)
     await db.flush()
@@ -89,6 +91,8 @@ async def create_agent(
             llm_model=model,
             llm_api_keys=agent_data.llm_api_keys,
             enable_chromium=agent_data.enable_chromium,
+            custom_image=agent_data.custom_image,
+            custom_image_tag=agent_data.custom_image_tag,
         )
         agent.status = AgentStatus.RUNNING.value
         await db.commit()

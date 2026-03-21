@@ -499,6 +499,9 @@ function CreateAgentModal({ tenantName, onClose, onSuccess, onError }) {
   const [model, setModel] = useState('')
   const [apiKeys, setApiKeys] = useState({})
   const [enableChromium, setEnableChromium] = useState(false)
+  const [showAdvanced, setShowAdvanced] = useState(false)
+  const [customImage, setCustomImage] = useState('')
+  const [customImageTag, setCustomImageTag] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
@@ -527,6 +530,8 @@ function CreateAgentModal({ tenantName, onClose, onSuccess, onError }) {
         llmModel: model || undefined,
         llmApiKeys: Object.keys(apiKeys).length ? apiKeys : undefined,
         enableChromium,
+        customImage: customImage.trim() || undefined,
+        customImageTag: customImageTag.trim() || undefined,
       })
       onSuccess('Agent created! Pod is starting...')
     } catch (err) {
@@ -615,6 +620,31 @@ function CreateAgentModal({ tenantName, onClose, onSuccess, onError }) {
               <input type="checkbox" checked={enableChromium} onChange={e => setEnableChromium(e.target.checked)} />
               <span>🌐 <strong>Enable Browser</strong> — adds Chromium sidecar for web automation (+500m CPU, +1Gi mem)</span>
             </label>
+          </div>
+
+          <div style={{marginBottom:'12px'}}>
+            <button type="button" className="btn btn-sm" onClick={() => setShowAdvanced(!showAdvanced)}
+              style={{fontSize:'12px', color:'var(--text-secondary)'}}>
+              {showAdvanced ? '▼' : '▶'} Advanced Options
+            </button>
+            {showAdvanced && (
+              <div style={{background:'var(--bg-secondary)', padding:'12px', borderRadius:'8px', marginTop:'8px'}}>
+                <p style={{fontSize:'12px', color:'var(--text-secondary)', marginBottom:'8px'}}>
+                  🐳 <strong>Custom Container Image</strong> — use a custom-built OpenClaw image with pre-installed tools.
+                  Leave empty to use the platform default.
+                </p>
+                <div className="form-group" style={{marginBottom:'8px'}}>
+                  <label style={{fontSize:'12px'}}>Image Repository</label>
+                  <input className="form-input" value={customImage} onChange={e => setCustomImage(e.target.value)}
+                    placeholder="e.g. public.ecr.aws/xxx/openclaw-custom" />
+                </div>
+                <div className="form-group" style={{marginBottom:'0'}}>
+                  <label style={{fontSize:'12px'}}>Image Tag</label>
+                  <input className="form-input" value={customImageTag} onChange={e => setCustomImageTag(e.target.value)}
+                    placeholder="e.g. 2026.3.21 (default: latest)" />
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="modal-actions">
@@ -1032,7 +1062,7 @@ function PlansPage() {
         memoryPerAgent: '4 Gi',
         totalCpu: '4 vCPU',
         totalMemory: '8 Gi',
-        storage: '10 Gi per agent',
+        storage: '50 Gi per agent',
         channels: 'All (Telegram, Discord, Feishu, WhatsApp)',
         support: 'Community',
       },
@@ -1053,7 +1083,7 @@ function PlansPage() {
         memoryPerAgent: '4 Gi',
         totalCpu: '24 vCPU',
         totalMemory: '48 Gi',
-        storage: '10 Gi per agent',
+        storage: '50 Gi per agent',
         channels: 'All (Telegram, Discord, Feishu, WhatsApp)',
         support: 'Email',
       },
@@ -1074,7 +1104,7 @@ function PlansPage() {
         memoryPerAgent: '4 Gi',
         totalCpu: '120 vCPU',
         totalMemory: '240 Gi',
-        storage: '10 Gi per agent',
+        storage: '50 Gi per agent',
         channels: 'All + Custom integrations',
         support: 'Priority + Slack',
       },
@@ -1200,7 +1230,7 @@ function PlansPage() {
       <div style={{ textAlign: 'center', marginTop: 16, color: 'var(--text-secondary)', fontSize: 13 }}>
         <p>💡 Token counting is enabled on all plans but currently <strong>not enforced</strong> — you won't be cut off if you exceed the limit.</p>
         <p style={{ marginTop: 4, fontSize: 12 }}>
-          Each agent runs as a dedicated pod with its own CPU, memory, and 10Gi persistent storage.
+          Each agent runs as a dedicated pod with its own CPU, memory, and 50Gi persistent storage.
           Total CPU/Memory quota is the cluster-wide limit for all your agents combined.
         </p>
         <p style={{ marginTop: 8 }}>

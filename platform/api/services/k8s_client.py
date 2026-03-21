@@ -1,4 +1,5 @@
 """Kubernetes client for managing resources"""
+import json
 import os
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -205,12 +206,18 @@ class K8sClient:
         llm_api_keys: Optional[Dict[str, str]] = None,
         channel_config: Optional[Dict] = None,
         enable_chromium: bool = False,
+        custom_image: Optional[str] = None,
+        custom_image_tag: Optional[str] = None,
     ) -> dict:
         """Create OpenClawInstance CRD + agent-keys secret."""
         from api.models.agent import LLM_PROVIDERS
 
         await self.initialize()
         namespace = f"tenant-{tenant_name}"
+
+        # Resolve image: explicit param > platform default > operator default (ghcr.io/openclaw/openclaw)
+        effective_image = custom_image or settings.DEFAULT_AGENT_IMAGE or None
+        effective_image_tag = custom_image_tag or (settings.DEFAULT_AGENT_IMAGE_TAG if effective_image else None)
 
         provider_def = LLM_PROVIDERS.get(llm_provider)
         if not provider_def:
@@ -297,6 +304,28 @@ class K8sClient:
         if channel_config:
             raw_config["channels"] = channel_config
 
+        # ACP + Kiro configuration (ref: setup-kiro.sh)
+        raw_config["plugins"] = raw_config.get("plugins", {})
+        raw_config["plugins"]["entries"] = raw_config["plugins"].get("entries", {})
+        raw_config["plugins"]["entries"]["acpx"] = {
+            "enabled": True,
+            "config": {
+                "permissionMode": "approve-all",
+                "nonInteractivePermissions": "deny",
+            },
+        }
+        raw_config["acp"] = {
+            "enabled": True,
+            "backend": "acpx",
+            "defaultAgent": "kiro",
+            "allowedAgents": ["kiro", "codex", "claude", "gemini", "opencode"],
+            "maxConcurrentSessions": 8,
+            "runtime": {"ttlMinutes": 120},
+        }
+        raw_config["tools"] = {
+            "exec": {"security": "full", "ask": "off"},
+        }
+
         # 3) Build CRD body
         sqs_queue_url = settings.sqs_url
         body = {
@@ -312,13 +341,33 @@ class K8sClient:
                 },
             },
             "spec": {
+                **({"image": {
+                    "repository": effective_image,
+                    "tag": effective_image_tag or "latest",
+                    "pullPolicy": "Always",
+                }} if effective_image else {}),
                 "envFrom": [{"secretRef": {"name": f"{agent_name}-keys"}}],
                 "env": [{"name": "NODE_OPTIONS", "value": "--max-old-space-size=1536"}],
                 "config": {
                     "mergeMode": "merge",
                     "raw": raw_config,
                 },
-                "storage": {"persistence": {"enabled": True, "size": "10Gi"}},
+                "storage": {"persistence": {"enabled": True, "size": "50Gi"}},
+                # Seed .acpxrc.json into workspace so acpx can find kiro agent config.
+                # This is the project-level config; acpx reads it when cwd is the workspace.
+                # Global ~/.acpx/config.json is NOT accessible because operator creates
+                # /home/openclaw as root:root and the PVC only covers .openclaw/ subdirectory.
+                "workspace": {
+                    "initialFiles": {
+                        ".acpxrc.json": json.dumps({
+                            "defaultAgent": "kiro",
+                            "agents": {
+                                "kiro": {"command": "kiro-cli acp --trust-all-tools"},
+                            },
+                        }),
+                        "KIRO-PLAYBOOK.md": "# Kiro Playbook\n\nSee /home/node/.openclaw/workspace/KIRO-PLAYBOOK.md (baked into image)",
+                    },
+                },
                 "chromium": {
                     "enabled": enable_chromium,
                     **({"extraEnv": [
@@ -327,8 +376,8 @@ class K8sClient:
                     ]} if enable_chromium else {}),
                 },
                 "resources": {
-                    "requests": {"cpu": "250m", "memory": "1Gi"},
-                    "limits": {"cpu": "1", "memory": "2Gi"},
+                    "requests": {"cpu": "500m", "memory": "2Gi"},
+                    "limits": {"cpu": "2", "memory": "4Gi"},
                 },
                 # Metrics exporter sidecar - reads JSONL from shared PVC
                 "sidecars": [

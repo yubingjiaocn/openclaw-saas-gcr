@@ -43,8 +43,8 @@ Node.js 启动时堆内存约 500MB+，需要设置 `NODE_OPTIONS=--max-old-spac
 
 | Plan | requests | limits | 最大 Agent 数 |
 |------|----------|--------|---------------|
-| free | 250m CPU / 1Gi Mem | 1 CPU / 2Gi Mem | 1 |
-| pro | 250m CPU / 1Gi Mem | 1 CPU / 2Gi Mem | 5 |
+| free | 500m CPU / 2Gi Mem | 2 CPU / 4Gi Mem | 1 |
+| pro | 500m CPU / 2Gi Mem | 2 CPU / 4Gi Mem | 5 |
 | enterprise | 500m CPU / 2Gi Mem | 2 CPU / 4Gi Mem | 不限 |
 
 ### 节点规划
