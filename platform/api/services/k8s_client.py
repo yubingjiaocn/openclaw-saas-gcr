@@ -338,8 +338,8 @@ class K8sClient:
                     ]} if enable_chromium else {}),
                 },
                 "resources": {
-                    "requests": {"cpu": "250m", "memory": "1Gi"},
-                    "limits": {"cpu": "1", "memory": "2Gi"},
+                    "requests": {"cpu": "500m", "memory": "2Gi"},
+                    "limits": {"cpu": "2", "memory": "4Gi"},
                 },
                 "security": {
                     "containerSecurityContext": {
