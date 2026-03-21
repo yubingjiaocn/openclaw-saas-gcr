@@ -10,17 +10,20 @@ from api.database import engine
 
 async def migrate():
     async with engine.begin() as conn:
-        # Check if columns already exist (SQLite compatible)
-        result = await conn.execute(text("PRAGMA table_info(agents)"))
-        columns = {row[1] for row in result.fetchall()}
+        # Check if columns already exist (PostgreSQL compatible)
+        result = await conn.execute(text(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_name = 'agents' AND column_name IN ('custom_image', 'custom_image_tag')"
+        ))
+        existing = {row[0] for row in result.fetchall()}
 
-        if "custom_image" not in columns:
+        if "custom_image" not in existing:
             await conn.execute(text("ALTER TABLE agents ADD COLUMN custom_image VARCHAR(512)"))
             print("✅ Added column: custom_image")
         else:
             print("⏭️  Column custom_image already exists")
 
-        if "custom_image_tag" not in columns:
+        if "custom_image_tag" not in existing:
             await conn.execute(text("ALTER TABLE agents ADD COLUMN custom_image_tag VARCHAR(128)"))
             print("✅ Added column: custom_image_tag")
         else:
