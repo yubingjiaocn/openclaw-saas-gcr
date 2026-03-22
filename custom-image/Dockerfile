@@ -51,6 +51,11 @@ RUN mkdir -p /home/openclaw/.kiro/agents /home/openclaw/.kiro/settings
 COPY kiro-agent-config.json /home/openclaw/.kiro/agents/kiro_default.json
 RUN echo '{"chat.defaultAgent": "kiro_default"}' > /home/openclaw/.kiro/settings/cli.json
 
+# acpx session data directory — must exist in image layer because
+# /home/openclaw/ is read-only at runtime (readOnlyRootFilesystem).
+# acpx writes session state to ~/.acpx/ and fails with ENOENT if missing.
+RUN mkdir -p /home/openclaw/.acpx && chown 1000:1000 /home/openclaw/.acpx
+
 # Fix ownership
 RUN chown -R 1000:1000 /home/openclaw/.kiro
 
