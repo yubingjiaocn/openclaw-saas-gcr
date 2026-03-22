@@ -131,7 +131,6 @@ kubectl exec deploy/platform-api -n openclaw-platform -- python3 -m api.migratio
 echo ">>> [9/10] Deploying Billing Consumer..."
 cat "$SCRIPT_DIR/../yaml/billing-consumer.yaml" | \
   sed "s|\${BILLING_IMAGE}|$BILLING_IMAGE|g" | \
-  sed "s|\${REGION}|$REGION|g" | \
   kubectl apply -f -
 
 echo ">>> [10/10] Waiting for billing-consumer rollout..."

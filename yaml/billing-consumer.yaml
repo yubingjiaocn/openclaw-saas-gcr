@@ -23,28 +23,38 @@ spec:
         - name: consumer
           image: ${BILLING_IMAGE}
           command: ["python", "consumer.py"]
-          envFrom:
-            - secretRef:
-                name: platform-db-secret
-            - secretRef:
-                name: platform-config
           env:
+            - name: SQS_QUEUE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: platform-config
+                  key: SQS_QUEUE_URL
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: platform-db-secret
+                  key: DATABASE_URL
             - name: AWS_DEFAULT_REGION
-              value: "${REGION}"
+              valueFrom:
+                secretKeyRef:
+                  name: platform-config
+                  key: AWS_REGION
           resources:
             requests:
               cpu: 50m
               memory: 128Mi
             limits:
-              cpu: 250m
+              cpu: 200m
               memory: 256Mi
         - name: aggregator
           image: ${BILLING_IMAGE}
           command: ["python", "aggregator.py"]
-          envFrom:
-            - secretRef:
-                name: platform-db-secret
           env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: platform-db-secret
+                  key: DATABASE_URL
             - name: AGGREGATION_INTERVAL
               value: "300"
           resources:
@@ -52,5 +62,5 @@ spec:
               cpu: 50m
               memory: 128Mi
             limits:
-              cpu: 250m
+              cpu: 200m
               memory: 256Mi
