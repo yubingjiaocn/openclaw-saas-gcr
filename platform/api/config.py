@@ -49,6 +49,11 @@ class Settings(BaseSettings):
     # China region only supports feishu; global supports all
     AVAILABLE_CHANNELS: str = os.getenv("AVAILABLE_CHANNELS", "feishu")
 
+    # Available LLM providers for this region (comma-separated)
+    # CN region shouldn't have "bedrock" (platform managed, needs IAM keys in us-west-2)
+    # Empty = all providers available
+    AVAILABLE_LLM_PROVIDERS: str = os.getenv("AVAILABLE_LLM_PROVIDERS", "")
+
     # Custom agent image (overrides default ghcr.io/openclaw/openclaw)
     # Set to use a custom-built image with pre-installed tools (kiro-cli, tavily, etc.)
     DEFAULT_AGENT_IMAGE: str = os.getenv("DEFAULT_AGENT_IMAGE", "")

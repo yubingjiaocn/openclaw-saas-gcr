@@ -110,8 +110,12 @@ async def create_agent(
 @router.get("/api/v1/llm-providers")
 async def list_llm_providers():
     """List available LLM providers and their models"""
+    from api.config import settings
+    allowed = [p.strip() for p in settings.AVAILABLE_LLM_PROVIDERS.split(",") if p.strip()] if settings.AVAILABLE_LLM_PROVIDERS else None
     result = {}
     for key, defn in LLM_PROVIDERS.items():
+        if allowed and key not in allowed:
+            continue
         result[key] = {
             "name": defn["name"],
             "required_keys": defn["env_keys"],
