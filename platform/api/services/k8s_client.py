@@ -334,6 +334,12 @@ class K8sClient:
             "exec": {"security": "full", "ask": "off"},
         }
 
+        # Gateway: local mode required so sessions_spawn (acpx) can connect
+        # without triggering "pairing required" (1008) rejection.
+        raw_config["gateway"] = {
+            "mode": "local",
+        }
+
         # 3) Build CRD body
         sqs_queue_url = settings.sqs_url
         body = {
