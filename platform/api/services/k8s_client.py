@@ -402,6 +402,8 @@ class K8sClient:
                         "[ -f /opt/openclaw-custom/KIRO-PLAYBOOK.md ] && cp -f /opt/openclaw-custom/KIRO-PLAYBOOK.md /data/workspace/KIRO-PLAYBOOK.md || true",
                         "[ -f /opt/openclaw-custom/.kiro-wrapper.sh ] && cp -f /opt/openclaw-custom/.kiro-wrapper.sh /data/.kiro-wrapper.sh || true",
                         "rm -rf /data/identity /data/devices",
+                        # Inject Kiro playbook reference into AGENTS.md if not already present
+                        "grep -q 'KIRO-PLAYBOOK' /data/workspace/AGENTS.md 2>/dev/null || printf '\\n## Kiro 调用\\n当需要调用 Kiro 完成任务时，先读 `KIRO-PLAYBOOK.md`，严格按其中的规范执行。不要跳过看门狗流程。\\n' >> /data/workspace/AGENTS.md",
                         "chown -R 1000:1000 /data/skills /data/.acpx /data/.kiro /data/.kiro-wrapper.sh",
                     ])],
                     "volumeMounts": [{"name": "data", "mountPath": "/data"}],
