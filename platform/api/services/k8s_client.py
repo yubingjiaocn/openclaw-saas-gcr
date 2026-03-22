@@ -312,35 +312,41 @@ class K8sClient:
             raw_config["channels"] = channel_config
 
         # ACP + Kiro configuration (ref: setup-kiro.sh)
-        raw_config["plugins"] = raw_config.get("plugins", {})
-        raw_config["plugins"]["entries"] = raw_config["plugins"].get("entries", {})
-        raw_config["plugins"]["entries"]["acpx"] = {
-            "enabled": True,
-            "config": {
-                "permissionMode": "approve-all",
-                "nonInteractivePermissions": "deny",
-            },
-        }
-        raw_config["acp"] = {
-            "enabled": True,
-            "backend": "acpx",
-            "defaultAgent": "kiro",
-            "allowedAgents": ["kiro", "codex", "claude", "gemini", "opencode"],
-            "maxConcurrentSessions": 8,
-            "runtime": {"ttlMinutes": 120},
-        }
+        # Only enable when using a custom image that has acpx pre-installed.
+        # Standard openclaw image has readOnlyRootFilesystem — npm install to
+        # /app/extensions/acpx/node_modules will fail with ENOENT.
+        if effective_image:
+            raw_config["plugins"] = raw_config.get("plugins", {})
+            raw_config["plugins"]["entries"] = raw_config["plugins"].get("entries", {})
+            raw_config["plugins"]["entries"]["acpx"] = {
+                "enabled": True,
+                "config": {
+                    "permissionMode": "approve-all",
+                    "nonInteractivePermissions": "deny",
+                },
+            }
+            raw_config["acp"] = {
+                "enabled": True,
+                "backend": "acpx",
+                "defaultAgent": "kiro",
+                "allowedAgents": ["kiro", "codex", "claude", "gemini", "opencode"],
+                "maxConcurrentSessions": 8,
+                "runtime": {"ttlMinutes": 120},
+            }
+
         raw_config["tools"] = {
             "exec": {"security": "full", "ask": "off"},
         }
 
         # Gateway: local mode required so sessions_spawn (acpx) can connect
         # without triggering "pairing required" (1008) rejection.
-        raw_config["gateway"] = {
-            "mode": "local",
-            "auth": {
-                "mode": "none",
-            },
-        }
+        if effective_image:
+            raw_config["gateway"] = {
+                "mode": "local",
+                "auth": {
+                    "mode": "none",
+                },
+            }
 
         # 3) Build CRD body
         sqs_queue_url = settings.sqs_url
