@@ -28,30 +28,26 @@ class Settings(BaseSettings):
     # Logging
     LOG_LEVEL: str = "INFO"
 
-    # AWS Region settings (parameterized for multi-region support)
-    AWS_REGION: str = os.getenv("AWS_REGION", "us-west-2")
-    AWS_PARTITION: str = os.getenv("AWS_PARTITION", "aws")
-    AWS_ACCOUNT_ID: str = os.getenv("AWS_ACCOUNT_ID", "956045422469")
+    # AWS China Region settings
+    AWS_REGION: str = os.getenv("AWS_REGION", "cn-northwest-1")
+    AWS_PARTITION: str = os.getenv("AWS_PARTITION", "aws-cn")
+    AWS_ACCOUNT_ID: str = os.getenv("AWS_ACCOUNT_ID", "735091234506")
 
     SQS_QUEUE_URL: str = os.getenv(
         "SQS_QUEUE_URL",
-        "https://us-west-2.queue.amazonaws.com/956045422469/openclaw-saas-usage-events"
+        "https://cn-northwest-1.queue.amazonaws.com.cn/735091234506/openclaw-saas-dev-usage-events"
     )
 
     ECR_REGISTRY: str = os.getenv(
         "ECR_REGISTRY",
-        "956045422469.dkr.ecr.us-west-2.amazonaws.com"
+        "735091234506.dkr.ecr.cn-northwest-1.amazonaws.com.cn"
     )
 
-    METRICS_EXPORTER_TAG: str = os.getenv("METRICS_EXPORTER_TAG", "v0.1.0")
+    METRICS_EXPORTER_TAG: str = os.getenv("METRICS_EXPORTER_TAG", "latest")
 
-    # Available channels for this region (comma-separated, empty = all)
-    AVAILABLE_CHANNELS: str = os.getenv("AVAILABLE_CHANNELS", "")
-
-    # Custom agent image (overrides default ghcr.io/openclaw/openclaw)
-    # Set to use a custom-built image with pre-installed tools (kiro-cli, tavily, etc.)
-    DEFAULT_AGENT_IMAGE: str = os.getenv("DEFAULT_AGENT_IMAGE", "")
-    DEFAULT_AGENT_IMAGE_TAG: str = os.getenv("DEFAULT_AGENT_IMAGE_TAG", "latest")
+    # Available channels for this region (comma-separated)
+    # China region only supports feishu; global supports all
+    AVAILABLE_CHANNELS: str = os.getenv("AVAILABLE_CHANNELS", "feishu")
 
     # Custom agent image (overrides default ghcr.io/openclaw/openclaw)
     # Set to use a custom-built image with pre-installed tools (kiro-cli, tavily, etc.)
@@ -68,7 +64,7 @@ class Settings(BaseSettings):
 
     @property
     def metrics_exporter_image(self) -> str:
-        return f"{self.ECR_REGISTRY}/openclaw-metrics-exporter:{self.METRICS_EXPORTER_TAG}"
+        return f"{self.ECR_REGISTRY}/openclaw-saas-dev-metrics-exporter:{self.METRICS_EXPORTER_TAG}"
 
 
 settings = Settings()
