@@ -383,6 +383,15 @@ class K8sClient:
                         {"name": "CONNECTION_TIMEOUT", "value": "120000"},
                     ]} if enable_chromium else {}),
                 },
+                # Init container: create .acpx dir on PVC for readOnlyRootFilesystem.
+                # The custom image symlinks ~/.acpx → ~/.openclaw/.acpx but the PVC
+                # dir doesn't exist on first boot. This init container creates it.
+                **({"initContainers": [{
+                    "name": "init-acpx-dir",
+                    "image": "busybox:latest",
+                    "command": ["sh", "-c", "mkdir -p /data/.acpx/sessions && chown -R 1000:1000 /data/.acpx"],
+                    "volumeMounts": [{"name": "data", "mountPath": "/data"}],
+                }]} if effective_image else {}),
                 "resources": {
                     "requests": {"cpu": "500m", "memory": "2Gi"},
                     "limits": {"cpu": "2", "memory": "4Gi"},

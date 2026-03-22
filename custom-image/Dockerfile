@@ -51,10 +51,14 @@ RUN mkdir -p /home/openclaw/.kiro/agents /home/openclaw/.kiro/settings
 COPY kiro-agent-config.json /home/openclaw/.kiro/agents/kiro_default.json
 RUN echo '{"chat.defaultAgent": "kiro_default"}' > /home/openclaw/.kiro/settings/cli.json
 
-# acpx session data directory — must exist in image layer because
-# /home/openclaw/ is read-only at runtime (readOnlyRootFilesystem).
-# acpx writes session state to ~/.acpx/ and fails with ENOENT if missing.
-RUN mkdir -p /home/openclaw/.acpx && chown 1000:1000 /home/openclaw/.acpx
+# acpx session data directory — symlink to PVC-backed path.
+# /home/openclaw/ is read-only at runtime (readOnlyRootFilesystem) but
+# /home/openclaw/.openclaw/ is a PVC mount (writable). Create a symlink so
+# acpx writes to ~/.acpx → ~/.openclaw/.acpx (writable PVC).
+# The target dir is created by the init-config container (operator-managed)
+# or lazily by acpx's mkdir call following the symlink into the writable PVC.
+RUN ln -sf /home/openclaw/.openclaw/.acpx /home/openclaw/.acpx \
+    && chown -h 1000:1000 /home/openclaw/.acpx
 
 # Fix ownership
 RUN chown -R 1000:1000 /home/openclaw/.kiro
