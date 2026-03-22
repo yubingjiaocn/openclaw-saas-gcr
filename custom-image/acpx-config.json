@@ -1,8 +1,0 @@
-{
-  "defaultAgent": "kiro",
-  "agents": {
-    "kiro": {
-      "command": "kiro-cli acp --trust-all-tools"
-    }
-  }
-}
