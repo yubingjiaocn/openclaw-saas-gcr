@@ -383,14 +383,23 @@ class K8sClient:
                         {"name": "CONNECTION_TIMEOUT", "value": "120000"},
                     ]} if enable_chromium else {}),
                 },
-                # Init container: create .acpx dir on PVC for readOnlyRootFilesystem.
-                # The custom image symlinks ~/.acpx → ~/.openclaw/.acpx but the PVC
-                # dir doesn't exist on first boot. This init container creates it.
+                # Init container: copy skills + playbook from custom image to PVC,
+                # and create .acpx dir for readOnlyRootFilesystem symlink.
+                # Only needed when using a custom image (standard image has no staging area).
                 **({"initContainers": [{
-                    "name": "init-acpx-dir",
-                    "image": "busybox:latest",
-                    "command": ["sh", "-c", "mkdir -p /data/.acpx/sessions && chown -R 1000:1000 /data/.acpx"],
+                    "name": "init-custom",
+                    "image": effective_image + ":" + (effective_image_tag or "latest"),
+                    "command": ["sh", "-c", " && ".join([
+                        "mkdir -p /data/skills /data/.acpx/sessions",
+                        "cp -r /opt/openclaw-custom/skills/* /data/skills/ 2>/dev/null || true",
+                        "[ -f /opt/openclaw-custom/KIRO-PLAYBOOK.md ] && cp /opt/openclaw-custom/KIRO-PLAYBOOK.md /data/workspace/KIRO-PLAYBOOK.md || true",
+                        "chown -R 1000:1000 /data/skills /data/.acpx",
+                    ])],
                     "volumeMounts": [{"name": "data", "mountPath": "/data"}],
+                    "resources": {
+                        "requests": {"cpu": "10m", "memory": "16Mi"},
+                        "limits": {"cpu": "100m", "memory": "64Mi"},
+                    },
                 }]} if effective_image else {}),
                 "resources": {
                     "requests": {"cpu": "500m", "memory": "2Gi"},
