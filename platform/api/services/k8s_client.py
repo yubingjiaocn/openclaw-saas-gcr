@@ -338,6 +338,9 @@ class K8sClient:
         # without triggering "pairing required" (1008) rejection.
         raw_config["gateway"] = {
             "mode": "local",
+            "auth": {
+                "mode": "none",
+            },
         }
 
         # 3) Build CRD body
