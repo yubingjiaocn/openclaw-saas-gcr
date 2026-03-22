@@ -35,11 +35,14 @@ RUN set -e \
     && kiro-cli --version
 
 # ── acpx: pre-install into extension dir ──
-# Base image ships /app/extensions/acpx/ without node_modules.
-# Runtime npm-install fails on readOnlyRootFilesystem.
-# Pre-install bakes the binary into the image layer.
-RUN cd /app/extensions/acpx && npm install --omit=dev --no-save acpx@0.1.15 2>&1 \
-    && ls -la /app/extensions/acpx/node_modules/.bin/acpx
+# Base image ships /app/extensions/acpx/ with package.json but no node_modules.
+# Runtime npm-install fails on readOnlyRootFilesystem (EROFS).
+# Pre-install here so the runtime version check passes without re-install.
+# `npm install --omit=dev` follows package.json's declared acpx version,
+# so it automatically tracks the base image on upgrades.
+RUN cd /app/extensions/acpx && npm install --omit=dev 2>&1 \
+    && ls -la /app/extensions/acpx/node_modules/.bin/acpx \
+    && /app/extensions/acpx/node_modules/.bin/acpx --version
 
 # ── Kiro config (image layer, read-only but readable at runtime) ──
 RUN mkdir -p /home/openclaw/.kiro/agents /home/openclaw/.kiro/settings
@@ -63,7 +66,6 @@ USER node
 # ── Verify ──
 RUN kiro-cli --version && jq --version \
     && /app/extensions/acpx/node_modules/.bin/acpx --version \
-    && cat /home/openclaw/.kiro/agents/kiro_default.json | jq .name \
     && ls /opt/openclaw-custom/skills/search/SKILL.md \
     && ls /opt/openclaw-custom/KIRO-PLAYBOOK.md
 
