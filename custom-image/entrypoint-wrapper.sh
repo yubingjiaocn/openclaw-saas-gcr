@@ -54,5 +54,5 @@ auto_pair() {
 # Run auto-pair in background so openclaw starts immediately
 auto_pair &
 
-# Exec into the real entrypoint
-exec openclaw "$@"
+# Exec into the original entrypoint (docker-entrypoint.sh from base image)
+exec docker-entrypoint.sh "$@"
