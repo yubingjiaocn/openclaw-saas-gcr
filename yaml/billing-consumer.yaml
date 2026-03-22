@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: billing-consumer
+  namespace: openclaw-platform
+  labels:
+    app.kubernetes.io/name: billing-consumer
+    app.kubernetes.io/component: billing
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: billing-consumer
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: billing-consumer
+        app.kubernetes.io/component: billing
+    spec:
+      serviceAccountName: platform-api
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: consumer
+          image: ${BILLING_IMAGE}
+          command: ["python", "consumer.py"]
+          envFrom:
+            - secretRef:
+                name: platform-db-secret
+            - secretRef:
+                name: platform-config
+          env:
+            - name: AWS_DEFAULT_REGION
+              value: "${REGION}"
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+        - name: aggregator
+          image: ${BILLING_IMAGE}
+          command: ["python", "aggregator.py"]
+          envFrom:
+            - secretRef:
+                name: platform-db-secret
+          env:
+            - name: AGGREGATION_INTERVAL
+              value: "300"
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi

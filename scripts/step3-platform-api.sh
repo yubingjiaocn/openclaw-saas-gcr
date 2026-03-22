@@ -14,6 +14,7 @@ ADMIN_PASSWORD="${ADMIN_PASSWORD:-OpenClaw2026!}"
 
 # All images from public.ecr.aws (accessible from CN)
 PLATFORM_IMAGE="${PLATFORM_IMAGE:-public.ecr.aws/i4x4j7g8/openclaw-saas/platform:v0.9.21-workshop}"
+BILLING_IMAGE="${BILLING_IMAGE:-public.ecr.aws/i4x4j7g8/openclaw-saas/billing-consumer:v0.1.0}"
 PLATFORM_REPLICAS="${PLATFORM_REPLICAS:-2}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -47,7 +48,7 @@ aws eks update-kubeconfig --name "$CLUSTER_NAME" --region "$REGION"
 
 # 1. Get RDS password
 echo ""
-echo ">>> [1/8] Retrieving RDS password..."
+echo ">>> [1/10] Retrieving RDS password..."
 DB_PASSWORD=$(aws secretsmanager get-secret-value --secret-id "$RDS_SECRET_ARN" --region "$REGION" \
   --query 'SecretString' --output text | python3 -c "import sys,json; print(json.load(sys.stdin)['password'])")
 DATABASE_URL="postgresql+asyncpg://openclaw_admin:${DB_PASSWORD}@${RDS_ENDPOINT}:5432/openclawsaas"
@@ -56,11 +57,11 @@ DATABASE_URL="postgresql+asyncpg://openclaw_admin:${DB_PASSWORD}@${RDS_ENDPOINT}
 JWT_SECRET=$(python3 -c "import secrets,string; print(''.join(secrets.choice(string.ascii_letters+string.digits) for _ in range(64)))")
 
 # 3. Create namespace
-echo ">>> [2/8] Creating namespace..."
+echo ">>> [2/10] Creating namespace..."
 kubectl create namespace openclaw-platform --dry-run=client -o yaml | kubectl apply -f -
 
 # 4. Create Pod Identity Association for platform-api SA
-echo ">>> [3/8] Creating Pod Identity Association..."
+echo ">>> [3/10] Creating Pod Identity Association..."
 aws eks create-pod-identity-association \
   --cluster-name "$CLUSTER_NAME" \
   --namespace openclaw-platform \
@@ -69,7 +70,7 @@ aws eks create-pod-identity-association \
   --region "$REGION" 2>/dev/null || echo "  (already exists)"
 
 # 5. Create RBAC for platform-api ServiceAccount
-echo ">>> [4/8] Creating RBAC..."
+echo ">>> [4/10] Creating RBAC..."
 cat <<'RBAC_EOF' | kubectl apply -f -
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -87,7 +88,7 @@ subjects:
 RBAC_EOF
 
 # 6. Create secrets
-echo ">>> [5/8] Creating K8s secrets..."
+echo ">>> [5/10] Creating K8s secrets..."
 kubectl create secret generic platform-db-secret \
   --namespace openclaw-platform \
   --from-literal="DATABASE_URL=$DATABASE_URL" \
@@ -111,20 +112,30 @@ kubectl create secret generic platform-admin-seed \
   --dry-run=client -o yaml | kubectl apply -f -
 
 # 7. Deploy platform-api
-echo ">>> [6/8] Deploying Platform API..."
+echo ">>> [6/10] Deploying Platform API..."
 cat "$SCRIPT_DIR/../yaml/platform-api.yaml" | \
   sed "s|\${PLATFORM_IMAGE}|$PLATFORM_IMAGE|g" | \
   sed "s|\${PLATFORM_REPLICAS}|$PLATFORM_REPLICAS|g" | \
   sed "s|\${NLB_SG_ID}|$NLB_SG_ID|g" | \
   kubectl apply -f -
 
-echo ">>> [7/8] Waiting for rollout..."
+echo ">>> [7/10] Waiting for rollout..."
 kubectl rollout status deployment/platform-api -n openclaw-platform --timeout=300s
 
 # 8. Run database migrations
-echo ">>> [8/8] Running database migrations..."
+echo ">>> [8/10] Running database migrations..."
 kubectl exec deploy/platform-api -n openclaw-platform -- python3 -m api.migrations.add_usage_tables
 kubectl exec deploy/platform-api -n openclaw-platform -- python3 -m api.migrations.add_custom_image_columns
+
+# 9. Deploy billing-consumer (SQS consumer + usage aggregator)
+echo ">>> [9/10] Deploying Billing Consumer..."
+cat "$SCRIPT_DIR/../yaml/billing-consumer.yaml" | \
+  sed "s|\${BILLING_IMAGE}|$BILLING_IMAGE|g" | \
+  sed "s|\${REGION}|$REGION|g" | \
+  kubectl apply -f -
+
+echo ">>> [10/10] Waiting for billing-consumer rollout..."
+kubectl rollout status deployment/billing-consumer -n openclaw-platform --timeout=120s
 
 echo ""
 echo "============================================"
@@ -133,6 +144,9 @@ echo "============================================"
 echo ""
 echo ">>> Platform API pods:"
 kubectl get pods -n openclaw-platform
+echo ""
+echo ">>> Billing Consumer pods:"
+kubectl get pods -n openclaw-platform -l app.kubernetes.io/name=billing-consumer
 echo ""
 echo ">>> Service (NLB may take 2-3 minutes):"
 kubectl get svc -n openclaw-platform
