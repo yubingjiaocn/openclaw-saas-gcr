@@ -398,9 +398,9 @@ class K8sClient:
                             {"name": "SQS_QUEUE_URL", "value": sqs_queue_url},
                             {"name": "AWS_DEFAULT_REGION", "value": settings.AWS_REGION},
                             {"name": "SCAN_INTERVAL_SECONDS", "value": "30"},
-                            {"name": "METRICS_PORT", "value": "9091"},
+                            {"name": "METRICS_PORT", "value": "9090"},
                         ],
-                        "ports": [{"containerPort": 9091, "name": "metrics"}],
+                        "ports": [{"containerPort": 9090, "name": "metrics"}],
                         "resources": {
                             "requests": {"cpu": "25m", "memory": "64Mi"},
                             "limits": {"cpu": "100m", "memory": "128Mi"},
