@@ -354,7 +354,7 @@ function TenantPage() {
             <div className="agent-info">
               <span className="agent-name">{a.name}</span>
               <span className={`badge ${a.status === 'running' ? 'badge-green' : 'badge-orange'}`}>{a.status}</span>
-              <span className="badge badge-blue">{a.llm_provider || 'bedrock-irsa'}</span>
+              <span className="badge badge-blue">{a.llm_provider || 'bedrock-apikey'}</span>
               {a.llm_model && <span style={{color:'var(--text-secondary)', fontSize:'11px'}}>{a.llm_model}</span>}
               <div className="agent-channels">
                 {(a.channels || []).map(ch => <span key={ch} className="channel-chip">{ch}</span>)}
@@ -495,7 +495,7 @@ function AllowedEmailsCard({ tenantName, initialEmails }) {
 function CreateAgentModal({ tenantName, onClose, onSuccess, onError }) {
   const [name, setName] = useState('')
   const [providers, setProviders] = useState(null)
-  const [provider, setProvider] = useState('bedrock-irsa')
+  const [provider, setProvider] = useState('bedrock-apikey')
   const [model, setModel] = useState('')
   const [apiKeys, setApiKeys] = useState({})
   const [enableChromium, setEnableChromium] = useState(false)
@@ -509,7 +509,7 @@ function CreateAgentModal({ tenantName, onClose, onSuccess, onError }) {
   useState(() => {
     api.getLlmProviders().then(p => {
       setProviders(p)
-      setModel(p['bedrock-irsa']?.default_model || '')
+      setModel(p['bedrock-apikey']?.default_model || '')
     }).catch(e => setError(e.message))
   }, [])
 
@@ -621,12 +621,6 @@ function CreateAgentModal({ tenantName, onClose, onSuccess, onError }) {
                   value={apiKeys['CUSTOM_MODEL_ID'] || ''} onChange={e => setApiKeys({...apiKeys, CUSTOM_MODEL_ID: e.target.value})} required />
               </div>
             </div>
-          )}
-
-          {provider === 'bedrock-irsa' && (
-            <p style={{fontSize:'13px', color:'var(--text-secondary)', marginBottom:'12px'}}>
-              ✅ No API keys needed — uses platform-managed AWS Bedrock access.
-            </p>
           )}
 
           <div style={{background:'var(--bg-secondary)', padding:'12px', borderRadius:'8px', marginBottom:'12px'}}>

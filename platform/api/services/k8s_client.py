@@ -235,7 +235,7 @@ class K8sClient:
             if missing:
                 raise ValueError(f"Missing required API keys for {llm_provider}: {', '.join(missing)}")
             # Only store actual secrets in K8s Secret (not config values like URLs)
-            non_secret_keys = {"CUSTOM_BASE_URL", "CUSTOM_MODEL_ID"}
+            non_secret_keys = {"CUSTOM_BASE_URL", "CUSTOM_MODEL_ID", "AWS_DEFAULT_REGION"}
             secret_data = {k: v for k, v in llm_api_keys.items() if k not in non_secret_keys}
 
         await self.create_secret(tenant_name, f"{agent_name}-keys", secret_data)
@@ -245,7 +245,6 @@ class K8sClient:
         #    - For bedrock: need explicit provider config
         model_prefix = {
             "bedrock": f"amazon-bedrock/{model}",
-            "bedrock-irsa": f"amazon-bedrock/{model}",
             "bedrock-apikey": f"amazon-bedrock/{model}",
             "openai": model,
             "anthropic": model,
