@@ -23,11 +23,16 @@ RUN set -e \
     && rm -rf /tmp/kirocli /tmp/kirocli.tar.gz \
     && kiro-cli --version
 
-# ── acpx: use OpenClaw's built-in acpx (do NOT override version) ──
-# OpenClaw bundles acpx in /app/extensions/acpx/node_modules/.bin/acpx
-# with a pinned version. Installing a different version causes a mismatch
-# and runtime failure (npm install fallback fails on read-only filesystem).
-# We only install acpx globally for CLI convenience (e.g. `acpx config show`).
+# ── acpx: install the pinned version into the OpenClaw extension dir ──
+# The Docker image doesn't ship node_modules for the acpx extension, so
+# OpenClaw tries `npm install` at startup — which fails when the operator
+# sets readOnlyRootFilesystem=true.  Pre-install here at build time.
+#
+# IMPORTANT: must match ACPX_PINNED_VERSION in extensions/acpx/src/config.ts
+# (currently 0.1.16).  Installing a different version triggers a version
+# mismatch → npm-install fallback → same ENOENT failure.
+RUN cd /app/extensions/acpx && npm install --omit=dev --no-save acpx@0.1.16 2>&1 \
+    && ls -la /app/extensions/acpx/node_modules/.bin/acpx
 RUN npm install -g acpx@latest && acpx --version
 
 # ── Kiro + acpx config (baked into image layer) ──
