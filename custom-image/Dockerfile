@@ -23,10 +23,12 @@ RUN set -e \
     && rm -rf /tmp/kirocli /tmp/kirocli.tar.gz \
     && kiro-cli --version
 
-# ── acpx: install globally + into the OpenClaw acpx extension dir ──
+# ── acpx: use OpenClaw's built-in acpx (do NOT override version) ──
+# OpenClaw bundles acpx in /app/extensions/acpx/node_modules/.bin/acpx
+# with a pinned version. Installing a different version causes a mismatch
+# and runtime failure (npm install fallback fails on read-only filesystem).
+# We only install acpx globally for CLI convenience (e.g. `acpx config show`).
 RUN npm install -g acpx@latest && acpx --version
-RUN cd /app/extensions/acpx && npm install --omit=dev --no-save acpx@latest 2>&1 \
-    && ls -la /app/extensions/acpx/node_modules/.bin/acpx
 
 # ── Kiro + acpx config (baked into image layer) ──
 # CRITICAL: operator sets readOnlyRootFilesystem=true + HOME=/home/openclaw
