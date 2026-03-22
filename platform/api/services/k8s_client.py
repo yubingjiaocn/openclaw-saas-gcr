@@ -383,7 +383,8 @@ class K8sClient:
                     ]} if enable_chromium else {}),
                 },
                 # Init container: copy skills + playbook + kiro config from custom image
-                # to PVC, create .acpx dir, and install kiro wrapper script.
+                # to PVC, create .acpx dir, install kiro wrapper, and clean stale device
+                # identity (prevents sessions_spawn pairing failures on pod restart).
                 # Only needed when using a custom image (standard image has no staging area).
                 **({"initContainers": [{
                     "name": "init-custom",
@@ -394,6 +395,7 @@ class K8sClient:
                         "cp -r /opt/openclaw-custom/.kiro/* /data/.kiro/ 2>/dev/null || true",
                         "[ -f /opt/openclaw-custom/KIRO-PLAYBOOK.md ] && cp -f /opt/openclaw-custom/KIRO-PLAYBOOK.md /data/workspace/KIRO-PLAYBOOK.md || true",
                         "[ -f /opt/openclaw-custom/.kiro-wrapper.sh ] && cp -f /opt/openclaw-custom/.kiro-wrapper.sh /data/.kiro-wrapper.sh || true",
+                        "rm -rf /data/identity /data/devices",
                         "chown -R 1000:1000 /data/skills /data/.acpx /data/.kiro /data/.kiro-wrapper.sh",
                     ])],
                     "volumeMounts": [{"name": "data", "mountPath": "/data"}],

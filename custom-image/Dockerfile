@@ -44,6 +44,10 @@ RUN cd /app/extensions/acpx \
     && npm install --omit=dev --no-save "acpx@${PINNED}" 2>&1 \
     && /app/extensions/acpx/node_modules/.bin/acpx --version
 
+# ── Make acpx available globally via PATH ──
+# Sub-agents use `exec acpx ...` from workspace dir; need acpx on PATH.
+ENV PATH="/app/extensions/acpx/node_modules/.bin:${PATH}"
+
 # ── Kiro config (image layer, read-only but readable at runtime) ──
 # Note: /home/openclaw/.kiro/ is read-only at runtime. The kiro-cli ACP mode
 # needs to write to ~/.kiro/sessions/. The init container copies this config
