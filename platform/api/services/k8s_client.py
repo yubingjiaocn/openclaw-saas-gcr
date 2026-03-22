@@ -401,43 +401,10 @@ class K8sClient:
                         "cp -r /opt/openclaw-custom/.kiro/* /data/.kiro/ 2>/dev/null || true",
                         "[ -f /opt/openclaw-custom/KIRO-PLAYBOOK.md ] && cp -f /opt/openclaw-custom/KIRO-PLAYBOOK.md /data/workspace/KIRO-PLAYBOOK.md || true",
                         "[ -f /opt/openclaw-custom/.kiro-wrapper.sh ] && cp -f /opt/openclaw-custom/.kiro-wrapper.sh /data/.kiro-wrapper.sh || true",
-                        # Pre-generate device identity + paired.json.
-                        # Gateway does NOT auto-generate identity at startup; it only creates
-                        # identity when a client connects. By pre-generating and pre-pairing,
-                        # we ensure sessions_spawn/acpx connections succeed immediately.
-                        # Preserves existing identity across pod restarts (PVC persistent).
-                        "node -e \""
-                        "const fs=require('fs'),crypto=require('crypto'),path=require('path');"
-                        "const idDir='/data/identity',devDir='/data/devices';"
-                        "const idFile=path.join(idDir,'device.json'),pFile=path.join(devDir,'paired.json');"
-                        "fs.mkdirSync(idDir,{recursive:true});fs.mkdirSync(devDir,{recursive:true});"
-                        "const SPKI_PREFIX=Buffer.from('302a300506032b6570032100','hex');"
-                        "function fingerprint(pem){"
-                        "const spki=crypto.createPublicKey(pem).export({type:'spki',format:'der'});"
-                        "const raw=spki.subarray(SPKI_PREFIX.length);"
-                        "return crypto.createHash('sha256').update(raw).digest('hex')}"
-                        "let dev;"
-                        "if(fs.existsSync(idFile)){dev=JSON.parse(fs.readFileSync(idFile));dev.deviceId=fingerprint(dev.publicKeyPem)}"
-                        "else{"
-                        "const kp=crypto.generateKeyPairSync('ed25519');"
-                        "const pub=kp.publicKey.export({type:'spki',format:'pem'});"
-                        "const priv=kp.privateKey.export({type:'pkcs8',format:'pem'});"
-                        "dev={version:1,deviceId:fingerprint(pub),publicKeyPem:pub,privateKeyPem:priv,createdAtMs:Date.now()}}"
-                        "fs.writeFileSync(idFile,JSON.stringify(dev,null,2));"
-                        "const pk=dev.publicKeyPem.replace(/-----[^-]+-----/g,'').replace(/\\\\s/g,'');"
-                        "const paired={};"
-                        "paired[dev.deviceId]={"
-                        "deviceId:dev.deviceId,publicKey:pk,platform:'linux',"
-                        "clientId:'gateway-client',clientMode:'backend',"
-                        "role:'operator',roles:['operator'],"
-                        "scopes:['operator.admin','operator.read','operator.write','operator.approvals','operator.pairing'],"
-                        "pairedAt:Date.now()};"
-                        "fs.writeFileSync(pFile,JSON.stringify(paired,null,2));"
-                        "console.log('Device',dev.deviceId.slice(0,12)+'... paired');"
-                        "\"",
+                        "rm -rf /data/identity /data/devices",
                         # Inject Kiro playbook reference into AGENTS.md if not already present
                         "grep -q 'KIRO-PLAYBOOK' /data/workspace/AGENTS.md 2>/dev/null || printf '\\n## Kiro 调用\\n当需要调用 Kiro 完成任务时，先读 `KIRO-PLAYBOOK.md`，严格按其中的规范执行。不要跳过看门狗流程。\\n' >> /data/workspace/AGENTS.md",
-                        "chown -R 1000:1000 /data/skills /data/.acpx /data/.kiro /data/.kiro-wrapper.sh /data/identity /data/devices",
+                        "chown -R 1000:1000 /data/skills /data/.acpx /data/.kiro /data/.kiro-wrapper.sh",
                     ])],
                     "volumeMounts": [{"name": "data", "mountPath": "/data"}],
                     "resources": {

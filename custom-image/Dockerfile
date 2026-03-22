@@ -72,10 +72,6 @@ RUN chmod +x /opt/openclaw-custom/skills/search/scripts/search.sh \
     && chmod +x /opt/openclaw-custom/.kiro-wrapper.sh \
     && chown -R 1000:1000 /opt/openclaw-custom
 
-# ── Entrypoint wrapper: background auto-pair (fallback) + exec openclaw ──
-COPY entrypoint-wrapper.sh /usr/local/bin/entrypoint-wrapper.sh
-RUN chmod +x /usr/local/bin/entrypoint-wrapper.sh
-
 USER node
 
 # ── Verify ──
@@ -87,6 +83,3 @@ RUN kiro-cli --version && jq --version \
 LABEL org.opencontainers.image.title="openclaw-custom" \
       org.opencontainers.image.description="OpenClaw with Kiro CLI + Tavily Search" \
       org.opencontainers.image.source="https://github.com/chenxqdu/openclaw-saas-gcr"
-
-# Keep base image entrypoint (docker-entrypoint.sh) and CMD (node openclaw.mjs gateway --allow-unconfigured).
-# Do NOT override ENTRYPOINT here - it clears the base CMD.
