@@ -821,7 +821,6 @@ function BillingPage() {
   const { name: tenantName } = useParams()
   const [billing, setBilling] = useState(null)
   const [usage, setUsage] = useState(null)
-  const [agentUsage, setAgentUsage] = useState({}) // { agentName: data }
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [period, setPeriod] = useState(30)
