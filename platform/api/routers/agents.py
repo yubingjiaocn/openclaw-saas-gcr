@@ -47,7 +47,7 @@ async def create_agent(
     """Create a new agent with chosen LLM provider and model.
 
     LLM providers:
-    - bedrock-irsa: Platform-managed Bedrock (no API keys needed, uses node IAM role)
+
     - bedrock: Your own AWS Bedrock (provide AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY)
     - openai: OpenAI (provide OPENAI_API_KEY)
     - anthropic: Anthropic (provide ANTHROPIC_API_KEY)

@@ -623,12 +623,6 @@ function CreateAgentModal({ tenantName, onClose, onSuccess, onError }) {
             </div>
           )}
 
-          {provider === 'bedrock-irsa' && (
-            <p style={{fontSize:'13px', color:'var(--text-secondary)', marginBottom:'12px'}}>
-              ✅ No API keys needed — uses platform-managed AWS Bedrock access.
-            </p>
-          )}
-
           <div style={{background:'var(--bg-secondary)', padding:'12px', borderRadius:'8px', marginBottom:'12px'}}>
             <label style={{display:'flex', alignItems:'center', gap:'8px', cursor:'pointer', fontSize:'13px'}}>
               <input type="checkbox" checked={enableChromium} onChange={e => setEnableChromium(e.target.checked)} />
