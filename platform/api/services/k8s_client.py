@@ -370,7 +370,7 @@ class K8sClient:
                         ".acpxrc.json": json.dumps({
                             "defaultAgent": "kiro",
                             "agents": {
-                                "kiro": {"command": "kiro-cli acp --trust-all-tools"},
+                                "kiro": {"command": "/home/openclaw/.openclaw/.kiro-wrapper.sh acp --trust-all-tools"},
                             },
                         }),
                     },
@@ -382,17 +382,19 @@ class K8sClient:
                         {"name": "CONNECTION_TIMEOUT", "value": "120000"},
                     ]} if enable_chromium else {}),
                 },
-                # Init container: copy skills + playbook from custom image to PVC,
-                # and create .acpx dir for readOnlyRootFilesystem symlink.
+                # Init container: copy skills + playbook + kiro config from custom image
+                # to PVC, create .acpx dir, and install kiro wrapper script.
                 # Only needed when using a custom image (standard image has no staging area).
                 **({"initContainers": [{
                     "name": "init-custom",
                     "image": effective_image + ":" + (effective_image_tag or "latest"),
                     "command": ["sh", "-c", " && ".join([
-                        "mkdir -p /data/skills /data/.acpx/sessions",
+                        "mkdir -p /data/skills /data/.acpx/sessions /data/.kiro",
                         "cp -r /opt/openclaw-custom/skills/* /data/skills/ 2>/dev/null || true",
+                        "cp -r /opt/openclaw-custom/.kiro/* /data/.kiro/ 2>/dev/null || true",
                         "[ -f /opt/openclaw-custom/KIRO-PLAYBOOK.md ] && cp -f /opt/openclaw-custom/KIRO-PLAYBOOK.md /data/workspace/KIRO-PLAYBOOK.md || true",
-                        "chown -R 1000:1000 /data/skills /data/.acpx",
+                        "[ -f /opt/openclaw-custom/.kiro-wrapper.sh ] && cp -f /opt/openclaw-custom/.kiro-wrapper.sh /data/.kiro-wrapper.sh || true",
+                        "chown -R 1000:1000 /data/skills /data/.acpx /data/.kiro /data/.kiro-wrapper.sh",
                     ])],
                     "volumeMounts": [{"name": "data", "mountPath": "/data"}],
                     "resources": {

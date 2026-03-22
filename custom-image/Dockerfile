@@ -7,7 +7,6 @@
 #   ✅ /home/openclaw/.openclaw/ — PVC mount, writable (data root)
 #   ✅ /home/openclaw/.cache/   — PVC subPath, writable
 #   ✅ /home/openclaw/.local/   — PVC subPath, writable
-#   ❌ /home/openclaw/.kiro/    — image layer, read-only (but readable)
 #   ❌ /app/                    — image layer, read-only
 #   ✅ /tmp/                    — emptyDir, writable
 #
@@ -46,20 +45,27 @@ RUN cd /app/extensions/acpx \
     && /app/extensions/acpx/node_modules/.bin/acpx --version
 
 # ── Kiro config (image layer, read-only but readable at runtime) ──
-RUN mkdir -p /home/openclaw/.kiro/agents /home/openclaw/.kiro/settings
-COPY kiro-agent-config.json /home/openclaw/.kiro/agents/kiro_default.json
-RUN echo '{"chat.defaultAgent": "kiro_default"}' > /home/openclaw/.kiro/settings/cli.json \
-    && chown -R 1000:1000 /home/openclaw/.kiro
+# Note: /home/openclaw/.kiro/ is read-only at runtime. The kiro-cli ACP mode
+# needs to write to ~/.kiro/sessions/. The init container copies this config
+# to the PVC at /home/openclaw/.openclaw/.kiro/ which IS writable.
+# A wrapper script redirects HOME so kiro-cli uses the PVC copy.
+RUN mkdir -p /opt/openclaw-custom/.kiro/agents /opt/openclaw-custom/.kiro/settings
+COPY kiro-agent-config.json /opt/openclaw-custom/.kiro/agents/kiro_default.json
+RUN echo '{"chat.defaultAgent": "kiro_default"}' > /opt/openclaw-custom/.kiro/settings/cli.json \
+    && chown -R 1000:1000 /opt/openclaw-custom/.kiro
 
 # ── acpx symlink: ~/.acpx → ~/.openclaw/.acpx (PVC, writable) ──
-RUN ln -sf /home/openclaw/.openclaw/.acpx /home/openclaw/.acpx \
+RUN mkdir -p /home/openclaw \
+    && ln -sf /home/openclaw/.openclaw/.acpx /home/openclaw/.acpx \
     && chown -h 1000:1000 /home/openclaw/.acpx
 
 # ── Staging area for PVC content (copied by init container) ──
 RUN mkdir -p /opt/openclaw-custom/skills
 COPY skills/search /opt/openclaw-custom/skills/search
 COPY KIRO-PLAYBOOK.md /opt/openclaw-custom/KIRO-PLAYBOOK.md
+COPY kiro-wrapper.sh /opt/openclaw-custom/.kiro-wrapper.sh
 RUN chmod +x /opt/openclaw-custom/skills/search/scripts/search.sh \
+    && chmod +x /opt/openclaw-custom/.kiro-wrapper.sh \
     && chown -R 1000:1000 /opt/openclaw-custom
 
 USER node
