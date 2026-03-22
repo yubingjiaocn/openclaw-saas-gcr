@@ -89,3 +89,4 @@ LABEL org.opencontainers.image.title="openclaw-custom" \
       org.opencontainers.image.source="https://github.com/chenxqdu/openclaw-saas-gcr"
 
 ENTRYPOINT ["entrypoint-wrapper.sh"]
+CMD ["node", "openclaw.mjs", "gateway", "--allow-unconfigured"]
