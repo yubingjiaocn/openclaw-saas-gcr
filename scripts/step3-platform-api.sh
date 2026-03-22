@@ -13,7 +13,7 @@ ADMIN_EMAIL="${ADMIN_EMAIL:-chenxqdu@amazon.com}"
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-OpenClaw2026!}"
 
 # All images from public.ecr.aws (accessible from CN)
-PLATFORM_IMAGE="${PLATFORM_IMAGE:-public.ecr.aws/i4x4j7g8/openclaw-saas/platform:v0.9.17}"
+PLATFORM_IMAGE="${PLATFORM_IMAGE:-public.ecr.aws/i4x4j7g8/openclaw-saas/platform:v0.9.20-workshop}"
 PLATFORM_REPLICAS="${PLATFORM_REPLICAS:-2}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -121,9 +121,10 @@ cat "$SCRIPT_DIR/../yaml/platform-api.yaml" | \
 echo ">>> [7/8] Waiting for rollout..."
 kubectl rollout status deployment/platform-api -n openclaw-platform --timeout=300s
 
-# 8. Run database migration for usage tables
-echo ">>> [8/8] Running database migration..."
+# 8. Run database migrations
+echo ">>> [8/8] Running database migrations..."
 kubectl exec deploy/platform-api -n openclaw-platform -- python3 -m api.migrations.add_usage_tables
+kubectl exec deploy/platform-api -n openclaw-platform -- python3 -m api.migrations.add_custom_image_columns
 
 echo ""
 echo "============================================"

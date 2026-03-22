@@ -48,6 +48,11 @@ class Settings(BaseSettings):
     # Available channels for this region (comma-separated, empty = all)
     AVAILABLE_CHANNELS: str = os.getenv("AVAILABLE_CHANNELS", "")
 
+    # Custom agent image (overrides default ghcr.io/openclaw/openclaw)
+    # Set to use a custom-built image with pre-installed tools (kiro-cli, tavily, etc.)
+    DEFAULT_AGENT_IMAGE: str = os.getenv("DEFAULT_AGENT_IMAGE", "")
+    DEFAULT_AGENT_IMAGE_TAG: str = os.getenv("DEFAULT_AGENT_IMAGE_TAG", "latest")
+
     @property
     def ecr_domain(self) -> str:
         return self.ECR_REGISTRY
@@ -58,7 +63,7 @@ class Settings(BaseSettings):
 
     @property
     def metrics_exporter_image(self) -> str:
-        return f"{self.ECR_REGISTRY}/openclaw-metrics-exporter:{self.METRICS_EXPORTER_TAG}"
+        return f"{self.ECR_REGISTRY}/openclaw-saas-dev-metrics-exporter:{self.METRICS_EXPORTER_TAG}"
 
 
 settings = Settings()

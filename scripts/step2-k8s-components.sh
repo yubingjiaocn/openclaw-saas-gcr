@@ -151,6 +151,9 @@ spec:
           # openclaw agent image (CRD default)
           ctr -n k8s.io images pull public.ecr.aws/i4x4j7g8/openclaw-saas/openclaw:2026.3.1 2>&1
           echo "openclaw done"
+          # openclaw-custom image (for custom agent image with kiro/acpx/tavily)
+          ctr -n k8s.io images pull public.ecr.aws/i4x4j7g8/openclaw-saas/openclaw-custom:2026.3.22 2>&1
+          echo "openclaw-custom done"
           echo "=== All images ready ==="
           sleep 3600
 RETAG_EOF

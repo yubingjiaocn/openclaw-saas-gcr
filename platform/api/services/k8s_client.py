@@ -1,4 +1,5 @@
 """Kubernetes client for managing resources"""
+import json
 import os
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -200,17 +201,23 @@ class K8sClient:
         self,
         tenant_name: str,
         agent_name: str,
-        llm_provider: str = "bedrock-irsa",
+        llm_provider: str = "openai-compatible",
         llm_model: Optional[str] = None,
         llm_api_keys: Optional[Dict[str, str]] = None,
         channel_config: Optional[Dict] = None,
         enable_chromium: bool = False,
+        custom_image: Optional[str] = None,
+        custom_image_tag: Optional[str] = None,
     ) -> dict:
         """Create OpenClawInstance CRD + agent-keys secret."""
         from api.models.agent import LLM_PROVIDERS
 
         await self.initialize()
         namespace = f"tenant-{tenant_name}"
+
+        # Resolve image: explicit param > platform default > operator default (ghcr.io/openclaw/openclaw)
+        effective_image = custom_image or settings.DEFAULT_AGENT_IMAGE or None
+        effective_image_tag = custom_image_tag or (settings.DEFAULT_AGENT_IMAGE_TAG if effective_image else None)
 
         provider_def = LLM_PROVIDERS.get(llm_provider)
         if not provider_def:
@@ -239,6 +246,7 @@ class K8sClient:
         model_prefix = {
             "bedrock": f"amazon-bedrock/{model}",
             "bedrock-irsa": f"amazon-bedrock/{model}",
+            "bedrock-apikey": f"amazon-bedrock/{model}",
             "openai": model,
             "anthropic": model,
             "openai-compatible": f"custom/{model}",
@@ -276,6 +284,13 @@ class K8sClient:
             }
             raw_config["agents"]["defaults"]["model"]["primary"] = f"custom/{model_id}"
 
+        # Bedrock API Key: override region in baseUrl from user-supplied AWS_DEFAULT_REGION
+        if llm_provider == "bedrock-apikey" and llm_api_keys:
+            region = llm_api_keys.get("AWS_DEFAULT_REGION", "us-west-2")
+            raw_config["models"]["providers"]["amazon-bedrock"]["baseUrl"] = (
+                f"https://bedrock-runtime.{region}.amazonaws.com"
+            )
+
         # Browser config: when Chromium sidecar is enabled, configure CDP connection
         # Use a custom profile name (not "openclaw" which is auto-managed and tries to launch)
         # Use pod hostname instead of 127.0.0.1 — OpenClaw treats loopback as local and
@@ -297,6 +312,37 @@ class K8sClient:
         if channel_config:
             raw_config["channels"] = channel_config
 
+        # ACP + Kiro configuration (ref: setup-kiro.sh)
+        raw_config["plugins"] = raw_config.get("plugins", {})
+        raw_config["plugins"]["entries"] = raw_config["plugins"].get("entries", {})
+        raw_config["plugins"]["entries"]["acpx"] = {
+            "enabled": True,
+            "config": {
+                "permissionMode": "approve-all",
+                "nonInteractivePermissions": "deny",
+            },
+        }
+        raw_config["acp"] = {
+            "enabled": True,
+            "backend": "acpx",
+            "defaultAgent": "kiro",
+            "allowedAgents": ["kiro", "codex", "claude", "gemini", "opencode"],
+            "maxConcurrentSessions": 8,
+            "runtime": {"ttlMinutes": 120},
+        }
+        raw_config["tools"] = {
+            "exec": {"security": "full", "ask": "off"},
+        }
+
+        # Gateway: local mode required so sessions_spawn (acpx) can connect
+        # without triggering "pairing required" (1008) rejection.
+        raw_config["gateway"] = {
+            "mode": "local",
+            "auth": {
+                "mode": "none",
+            },
+        }
+
         # 3) Build CRD body
         sqs_queue_url = settings.sqs_url
         body = {
@@ -312,13 +358,32 @@ class K8sClient:
                 },
             },
             "spec": {
+                **({"image": {
+                    "repository": effective_image,
+                    "tag": effective_image_tag or "latest",
+                    "pullPolicy": "Always",
+                }} if effective_image else {}),
                 "envFrom": [{"secretRef": {"name": f"{agent_name}-keys"}}],
                 "env": [{"name": "NODE_OPTIONS", "value": "--max-old-space-size=1536"}],
                 "config": {
                     "mergeMode": "merge",
                     "raw": raw_config,
                 },
-                "storage": {"persistence": {"enabled": True, "size": "10Gi"}},
+                "storage": {"persistence": {"enabled": True, "size": "50Gi"}},
+                # Seed .acpxrc.json into workspace so acpx can find kiro agent config.
+                # This is the project-level config; acpx reads it when cwd is the workspace.
+                # Global ~/.acpx/config.json is NOT accessible because operator creates
+                # /home/openclaw as root:root and the PVC only covers .openclaw/ subdirectory.
+                "workspace": {
+                    "initialFiles": {
+                        ".acpxrc.json": json.dumps({
+                            "defaultAgent": "kiro",
+                            "agents": {
+                                "kiro": {"command": "/home/openclaw/.openclaw/.kiro-wrapper.sh acp --trust-all-tools"},
+                            },
+                        }),
+                    },
+                },
                 "chromium": {
                     "enabled": enable_chromium,
                     **({"extraEnv": [
@@ -326,9 +391,33 @@ class K8sClient:
                         {"name": "CONNECTION_TIMEOUT", "value": "120000"},
                     ]} if enable_chromium else {}),
                 },
+                # Init container: copy skills + playbook + kiro config from custom image
+                # to PVC, create .acpx dir, install kiro wrapper, and clean stale device
+                # identity (prevents sessions_spawn pairing failures on pod restart).
+                # Only needed when using a custom image (standard image has no staging area).
+                **({"initContainers": [{
+                    "name": "init-custom",
+                    "image": effective_image + ":" + (effective_image_tag or "latest"),
+                    "command": ["sh", "-c", " && ".join([
+                        "mkdir -p /data/skills /data/.acpx/sessions /data/.kiro",
+                        "cp -r /opt/openclaw-custom/skills/* /data/skills/ 2>/dev/null || true",
+                        "cp -r /opt/openclaw-custom/.kiro/* /data/.kiro/ 2>/dev/null || true",
+                        "[ -f /opt/openclaw-custom/KIRO-PLAYBOOK.md ] && cp -f /opt/openclaw-custom/KIRO-PLAYBOOK.md /data/workspace/KIRO-PLAYBOOK.md || true",
+                        "[ -f /opt/openclaw-custom/.kiro-wrapper.sh ] && cp -f /opt/openclaw-custom/.kiro-wrapper.sh /data/.kiro-wrapper.sh || true",
+                        "rm -rf /data/identity /data/devices",
+                        # Inject Kiro playbook reference into AGENTS.md if not already present
+                        "grep -q 'KIRO-PLAYBOOK' /data/workspace/AGENTS.md 2>/dev/null || printf '\\n## Kiro 调用\\n当需要调用 Kiro 完成任务时，先读 `KIRO-PLAYBOOK.md`，严格按其中的规范执行。不要跳过看门狗流程。\\n' >> /data/workspace/AGENTS.md",
+                        "chown -R 1000:1000 /data/skills /data/.acpx /data/.kiro /data/.kiro-wrapper.sh",
+                    ])],
+                    "volumeMounts": [{"name": "data", "mountPath": "/data"}],
+                    "resources": {
+                        "requests": {"cpu": "10m", "memory": "16Mi"},
+                        "limits": {"cpu": "100m", "memory": "64Mi"},
+                    },
+                }]} if effective_image else {}),
                 "resources": {
-                    "requests": {"cpu": "250m", "memory": "1Gi"},
-                    "limits": {"cpu": "1", "memory": "2Gi"},
+                    "requests": {"cpu": "500m", "memory": "2Gi"},
+                    "limits": {"cpu": "2", "memory": "4Gi"},
                 },
                 # Metrics exporter sidecar - reads JSONL from shared PVC
                 "sidecars": [

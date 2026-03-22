@@ -30,6 +30,8 @@ class Agent(Base):
     channels = Column(JSON, default=list, nullable=False)
     llm_provider = Column(String(50), default="bedrock", nullable=False)
     llm_model = Column(String(255), nullable=True)
+    custom_image = Column(String(512), nullable=True)
+    custom_image_tag = Column(String(128), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
@@ -42,9 +44,10 @@ LLM_PROVIDERS = {
         "optional_keys": [],
         "default_model": "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
         "models": [
+            {"id": "global.anthropic.claude-opus-4-6-v1", "name": "Claude Opus 4.6"},
+            {"id": "global.anthropic.claude-sonnet-4-6", "name": "Claude Sonnet 4.6"},
             {"id": "global.anthropic.claude-sonnet-4-5-20250929-v1:0", "name": "Claude Sonnet 4.5"},
             {"id": "global.anthropic.claude-sonnet-4-20250514-v1:0", "name": "Claude Sonnet 4"},
-            {"id": "global.anthropic.claude-opus-4-6-v1", "name": "Claude Opus 4"},
             {"id": "deepseek.v3.2", "name": "DeepSeek V3.2"},
             {"id": "minimax.minimax-m2.1", "name": "MiniMax M2.1"},
             {"id": "moonshotai.kimi-k2.5", "name": "Kimi K2.5"},
@@ -82,9 +85,10 @@ LLM_PROVIDERS = {
         "optional_keys": [],
         "default_model": "claude-sonnet-4-5-20250929",
         "models": [
+            {"id": "claude-opus-4-6", "name": "Claude Opus 4.6"},
+            {"id": "claude-sonnet-4-6", "name": "Claude Sonnet 4.6"},
             {"id": "claude-sonnet-4-5-20250929", "name": "Claude Sonnet 4.5"},
             {"id": "claude-sonnet-4-20250514", "name": "Claude Sonnet 4"},
-            {"id": "claude-opus-4-6", "name": "Claude Opus 4"},
         ],
         "config_builder": lambda model: {},  # Anthropic auto-configured via env var
     },
@@ -94,6 +98,8 @@ LLM_PROVIDERS = {
         "optional_keys": [],
         "default_model": "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
         "models": [
+            {"id": "global.anthropic.claude-opus-4-6-v1", "name": "Claude Opus 4.6"},
+            {"id": "global.anthropic.claude-sonnet-4-6", "name": "Claude Sonnet 4.6"},
             {"id": "global.anthropic.claude-sonnet-4-5-20250929-v1:0", "name": "Claude Sonnet 4.5"},
             {"id": "global.anthropic.claude-sonnet-4-20250514-v1:0", "name": "Claude Sonnet 4"},
             {"id": "deepseek.v3.2", "name": "DeepSeek V3.2"},
@@ -125,6 +131,35 @@ LLM_PROVIDERS = {
         ],
         "config_builder": lambda model: {},  # Built dynamically in k8s_client
     },
+    "bedrock-apikey": {
+        "name": "AWS Bedrock (API Key)",
+        "env_keys": ["AWS_BEARER_TOKEN_BEDROCK"],
+        "optional_keys": ["AWS_DEFAULT_REGION"],
+        "default_model": "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
+        "models": [
+            {"id": "global.anthropic.claude-opus-4-6-v1", "name": "Claude Opus 4.6"},
+            {"id": "global.anthropic.claude-sonnet-4-6", "name": "Claude Sonnet 4.6"},
+            {"id": "global.anthropic.claude-sonnet-4-5-20250929-v1:0", "name": "Claude Sonnet 4.5"},
+            {"id": "global.anthropic.claude-sonnet-4-20250514-v1:0", "name": "Claude Sonnet 4"},
+            {"id": "deepseek.v3.2", "name": "DeepSeek V3.2"},
+            {"id": "minimax.minimax-m2.1", "name": "MiniMax M2.1"},
+            {"id": "moonshotai.kimi-k2.5", "name": "Kimi K2.5"},
+        ],
+        "config_builder": lambda model: {
+            "models": {
+                "providers": {
+                    "amazon-bedrock": {
+                        "baseUrl": "https://bedrock-runtime.us-west-2.amazonaws.com",
+                        "auth": "aws-sdk",
+                        "api": "bedrock-converse-stream",
+                        "models": [
+                            {"id": model, "name": model, "input": ["text", "image"], "contextWindow": 200000, "maxTokens": 8192},
+                        ],
+                    }
+                }
+            }
+        },
+    },
 }
 
 
@@ -133,10 +168,12 @@ class AgentCreate(BaseModel):
     """Agent creation schema"""
 
     name: str = Field(..., min_length=3, max_length=63, pattern="^[a-z0-9-]+$")
-    llm_provider: str = Field(default="bedrock-irsa", description="LLM provider: bedrock, openai, anthropic, bedrock-irsa")
+    llm_provider: str = Field(default="openai-compatible", description="LLM provider: bedrock, openai, anthropic, bedrock-irsa, openai-compatible, bedrock-apikey")
     llm_model: Optional[str] = Field(default=None, description="Model ID (uses provider default if not specified)")
     llm_api_keys: Optional[Dict[str, str]] = Field(default=None, description="API keys for the LLM provider")
     enable_chromium: bool = Field(default=False, description="Enable Chromium browser sidecar for web automation")
+    custom_image: Optional[str] = Field(default=None, description="Custom container image repository (e.g. public.ecr.aws/xxx/openclaw-custom)")
+    custom_image_tag: Optional[str] = Field(default=None, description="Custom container image tag (e.g. 2026.3.21). Defaults to 'latest' if custom_image is set")
     config: Optional[Dict[str, Any]] = Field(default_factory=dict)
 
 
@@ -150,6 +187,8 @@ class AgentResponse(BaseModel):
     channels: List[str]
     llm_provider: str
     llm_model: Optional[str]
+    custom_image: Optional[str] = None
+    custom_image_tag: Optional[str] = None
     created_at: datetime
 
     class Config:
