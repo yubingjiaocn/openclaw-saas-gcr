@@ -401,39 +401,13 @@ class K8sClient:
                         "cp -r /opt/openclaw-custom/.kiro/* /data/.kiro/ 2>/dev/null || true",
                         "[ -f /opt/openclaw-custom/KIRO-PLAYBOOK.md ] && cp -f /opt/openclaw-custom/KIRO-PLAYBOOK.md /data/workspace/KIRO-PLAYBOOK.md || true",
                         "[ -f /opt/openclaw-custom/.kiro-wrapper.sh ] && cp -f /opt/openclaw-custom/.kiro-wrapper.sh /data/.kiro-wrapper.sh || true",
-                        # Pre-generate device identity + auto-pair so gateway starts
-                        # with a valid paired device. Eliminates the race condition where
-                        # the main process connects before gateway completes self-pairing.
-                        # Only generates if identity doesn't already exist (preserves across restarts).
-                        "node -e \""
-                        "const fs=require('fs'),crypto=require('crypto'),path=require('path');"
-                        "const idDir='/data/identity',devDir='/data/devices';"
-                        "const idFile=path.join(idDir,'device.json'),pFile=path.join(devDir,'paired.json');"
-                        "fs.mkdirSync(idDir,{recursive:true});fs.mkdirSync(devDir,{recursive:true});"
-                        "let dev;"
-                        "if(fs.existsSync(idFile)){dev=JSON.parse(fs.readFileSync(idFile))}"
-                        "else{"
-                        "const kp=crypto.generateKeyPairSync('ed25519');"
-                        "const pub=kp.publicKey.export({type:'spki',format:'pem'});"
-                        "const priv=kp.privateKey.export({type:'pkcs8',format:'pem'});"
-                        "const raw=kp.publicKey.export({type:'spki',format:'der'});"
-                        "const id=crypto.createHash('sha256').update(raw).digest('hex');"
-                        "dev={version:1,deviceId:id,publicKeyPem:pub,privateKeyPem:priv,createdAtMs:Date.now()};"
-                        "fs.writeFileSync(idFile,JSON.stringify(dev,null,2))}"
-                        "const pk=dev.publicKeyPem.replace(/-----[^-]+-----/g,'').replace(/\\\\s/g,'');"
-                        "const paired={};"
-                        "paired[dev.deviceId]={"
-                        "deviceId:dev.deviceId,publicKey:pk,platform:'linux',"
-                        "clientId:'gateway-client',clientMode:'backend',"
-                        "role:'operator',roles:['operator'],"
-                        "scopes:['operator.admin','operator.read','operator.write','operator.approvals','operator.pairing'],"
-                        "pairedAt:Date.now()};"
-                        "fs.writeFileSync(pFile,JSON.stringify(paired,null,2));"
-                        "console.log('Device',dev.deviceId.slice(0,12)+'... paired');"
-                        "\"",
+                        # Clean stale identity+paired so gateway can generate fresh ones
+                        # and auto-self-pair cleanly with gateway.mode=local.
+                        # If we leave mismatched files, gateway won't self-pair.
+                        "rm -rf /data/identity /data/devices",
                         # Inject Kiro playbook reference into AGENTS.md if not already present
                         "grep -q 'KIRO-PLAYBOOK' /data/workspace/AGENTS.md 2>/dev/null || printf '\\n## Kiro 调用\\n当需要调用 Kiro 完成任务时，先读 `KIRO-PLAYBOOK.md`，严格按其中的规范执行。不要跳过看门狗流程。\\n' >> /data/workspace/AGENTS.md",
-                        "chown -R 1000:1000 /data/skills /data/.acpx /data/.kiro /data/.kiro-wrapper.sh /data/identity /data/devices",
+                        "chown -R 1000:1000 /data/skills /data/.acpx /data/.kiro /data/.kiro-wrapper.sh",
                     ])],
                     "volumeMounts": [{"name": "data", "mountPath": "/data"}],
                     "resources": {
