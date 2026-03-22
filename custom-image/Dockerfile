@@ -37,11 +37,12 @@ RUN set -e \
 # ── acpx: pre-install into extension dir ──
 # Base image ships /app/extensions/acpx/ with package.json but no node_modules.
 # Runtime npm-install fails on readOnlyRootFilesystem (EROFS).
-# Pre-install here so the runtime version check passes without re-install.
-# `npm install --omit=dev` follows package.json's declared acpx version,
-# so it automatically tracks the base image on upgrades.
-RUN cd /app/extensions/acpx && npm install --omit=dev 2>&1 \
-    && ls -la /app/extensions/acpx/node_modules/.bin/acpx \
+# Extract ACPX_PINNED_VERSION from config.ts and install that exact version
+# so the runtime version check passes without triggering a re-install.
+RUN cd /app/extensions/acpx \
+    && PINNED=$(grep 'ACPX_PINNED_VERSION' src/config.ts | grep -o '"[^"]*"' | head -1 | tr -d '"') \
+    && echo "Installing acpx@${PINNED} (from ACPX_PINNED_VERSION)" \
+    && npm install --omit=dev --no-save "acpx@${PINNED}" 2>&1 \
     && /app/extensions/acpx/node_modules/.bin/acpx --version
 
 # ── Kiro config (image layer, read-only but readable at runtime) ──

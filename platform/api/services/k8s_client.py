@@ -373,7 +373,6 @@ class K8sClient:
                                 "kiro": {"command": "kiro-cli acp --trust-all-tools"},
                             },
                         }),
-                        "KIRO-PLAYBOOK.md": "# Kiro Playbook\n\nSee /home/node/.openclaw/workspace/KIRO-PLAYBOOK.md (baked into image)",
                     },
                 },
                 "chromium": {
@@ -392,7 +391,7 @@ class K8sClient:
                     "command": ["sh", "-c", " && ".join([
                         "mkdir -p /data/skills /data/.acpx/sessions",
                         "cp -r /opt/openclaw-custom/skills/* /data/skills/ 2>/dev/null || true",
-                        "[ -f /opt/openclaw-custom/KIRO-PLAYBOOK.md ] && cp /opt/openclaw-custom/KIRO-PLAYBOOK.md /data/workspace/KIRO-PLAYBOOK.md || true",
+                        "[ -f /opt/openclaw-custom/KIRO-PLAYBOOK.md ] && cp -f /opt/openclaw-custom/KIRO-PLAYBOOK.md /data/workspace/KIRO-PLAYBOOK.md || true",
                         "chown -R 1000:1000 /data/skills /data/.acpx",
                     ])],
                     "volumeMounts": [{"name": "data", "mountPath": "/data"}],
