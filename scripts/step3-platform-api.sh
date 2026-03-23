@@ -71,6 +71,9 @@ aws eks create-pod-identity-association \
 
 # 5. Create RBAC for platform-api ServiceAccount (least-privilege)
 echo ">>> [4/10] Creating RBAC..."
+# Delete existing bindings first — K8s does not allow changing roleRef in-place
+kubectl delete clusterrolebinding platform-api-binding --ignore-not-found 2>/dev/null
+kubectl delete clusterrolebinding platform-api-pod-logs --ignore-not-found 2>/dev/null
 cat <<'RBAC_EOF' | kubectl apply -f -
 ---
 apiVersion: rbac.authorization.k8s.io/v1
