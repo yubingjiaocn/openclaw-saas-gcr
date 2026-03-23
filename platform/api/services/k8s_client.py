@@ -338,15 +338,15 @@ class K8sClient:
             "exec": {"security": "full", "ask": "off"},
         }
 
-        # Gateway: local mode required so sessions_spawn (acpx) can connect
-        # without triggering "pairing required" (1008) rejection.
-        if effective_image:
-            raw_config["gateway"] = {
-                "mode": "local",
-                "auth": {
-                    "mode": "none",
-                },
-            }
+        # Gateway: local mode for all agents — SaaS pods only listen on localhost,
+        # so device pairing is unnecessary and causes "pairing required (1008)" errors
+        # when acpx or sessions_spawn tries to connect.
+        raw_config["gateway"] = {
+            "mode": "local",
+            "auth": {
+                "mode": "none",
+            },
+        }
 
         # 3) Build CRD body
         sqs_queue_url = settings.sqs_url
