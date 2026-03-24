@@ -540,8 +540,8 @@ function CreateAgentModal({ tenantName, onClose, onSuccess, onError }) {
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()} style={{maxWidth:'520px'}}>
+    <div className="modal-overlay">
+      <div className="modal" onClick={e => e.stopPropagation()} style={{maxWidth:'520px', maxHeight:'85vh', overflowY:'auto'}}>
         <h2>Create Agent</h2>
         {error && <div className="alert alert-error">{error}</div>}
         <form onSubmit={handleSubmit}>
