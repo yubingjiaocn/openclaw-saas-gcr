@@ -265,9 +265,11 @@ Resources:
                   - secretsmanager:ListSecrets
                   - secretsmanager:TagResource
                   - secretsmanager:PutSecretValue
-                  # S3 (Helm charts)
+                  # S3
                   - s3:GetObject
                   - s3:ListBucket
+                  - s3:CreateBucket
+                  - s3:PutBucketVersioning
                   # KMS
                   - kms:Describe*
                   - kms:List*
@@ -1540,6 +1542,8 @@ Resources:
               - iam:AttachRolePolicy
               - iam:DetachRolePolicy
               - iam:ListAttachedRolePolicies
+              - iam:PutRolePolicy
+              - iam:DeleteRolePolicy
               - iam:ListRolePolicies
               - iam:ListInstanceProfilesForRole
               - iam:CreatePolicy
@@ -1674,6 +1678,8 @@ Resources:
             Action:
               - s3:GetObject
               - s3:ListBucket
+              - s3:CreateBucket
+              - s3:PutBucketVersioning
             Resource: "*"
           - Sid: KMS
             Effect: Allow
@@ -2104,7 +2110,46 @@ Resources:
       TargetType: AWS::RDS::DBInstance
 
   # ===========================================================================
-  # 10. SQS Queues for Platform API
+  # 10. Backup Infrastructure (S3 + IAM Role)
+  # ===========================================================================
+
+  BackupBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'openclaw-backups-${AWS::AccountId}'
+      VersioningConfiguration:
+        Status: Enabled
+
+  BackupRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ClusterName}-openclaw-backup-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: pods.eks.amazonaws.com
+            Action:
+              - sts:AssumeRole
+              - sts:TagSession
+      Policies:
+        - PolicyName: s3-backup-access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                  - s3:ListBucket
+                  - s3:DeleteObject
+                Resource:
+                  - !GetAtt BackupBucket.Arn
+                  - !Sub '${BackupBucket.Arn}/*'
+
+  # ===========================================================================
+  # 11. SQS Queues for Platform API
   # ===========================================================================
 
   UsageEventsDLQ:
@@ -2124,7 +2169,7 @@ Resources:
         maxReceiveCount: 3
 
   # ===========================================================================
-  # 11. Platform API IAM Role (Pod Identity for SQS)
+  # 12. Platform API IAM Role (Pod Identity for SQS)
   # ===========================================================================
 
   PlatformApiRole:
@@ -2323,6 +2368,14 @@ Outputs:
     Value: !GetAtt PlatformNLBSecurityGroup.GroupId
     Export:
       Name: !Sub '${AWS::StackName}-PlatformNLBSecurityGroupId'
+
+  BackupBucketName:
+    Description: S3 bucket for OpenClaw backups
+    Value: !Ref BackupBucket
+
+  BackupRoleArn:
+    Description: IAM Role ARN for backup Jobs (use with Pod Identity)
+    Value: !GetAtt BackupRole.Arn
 
   PostDeployInstructions:
     Description: Post-deploy steps
