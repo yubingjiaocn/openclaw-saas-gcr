@@ -9,7 +9,7 @@ set -euo pipefail
 
 STACK_NAME="${STACK_NAME:-openclaw-cn-workshop}"
 REGION="${REGION:-cn-northwest-1}"
-ADMIN_EMAIL="${ADMIN_EMAIL:-chenxqdu@amazon.com}"
+ADMIN_EMAIL="${ADMIN_EMAIL:-openclaw-saas-admin@example.com}"
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-OpenClaw2026!}"
 
 # All images from public.ecr.aws (accessible from CN)
