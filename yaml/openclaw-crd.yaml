@@ -3677,7 +3677,7 @@ spec:
                     description: Repository is the container image repository
                     type: string
                   tag:
-                    default: "2026.3.1"
+                    default: "2026.3.13-1"
                     description: Tag is the container image tag
                     type: string
                 type: object
