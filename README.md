@@ -380,7 +380,7 @@ For production HA: add Multi-AZ RDS (+$13), extra NAT gateways (+$32/AZ), reserv
 - **ACM Certificate**: `*.chenxqdu.space` (us-east-1, SNI)
 - **Origin**: NLB via HTTP (port 80), restricted to CloudFront prefix list `pl-82a045eb`
 - **Cache**: Disabled (CachingDisabled policy) — all requests forwarded to origin
-- **Admin**: chenxqdu@amazon.com
-- **GitHub**: duchenxi/openclaw-saas-platform (main branch)
+- **Admin**: admin@openclaw.ai
+- **GitHub**: chenxqdu/openclaw-saas-gcr (main branch)
 
 **Traffic flow**: Client → CloudFront (HTTPS, TLS 1.2+) → NLB (HTTP, port 80) → platform-api
