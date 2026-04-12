@@ -89,8 +89,10 @@ class Config:
 
     def get_tags(self) -> dict:
         """Get common tags for all resources"""
-        return {
+        tags = {
             "Project": self.project_name,
-            "Environment": self.environment,
             "ManagedBy": "CDK",
         }
+        if self.environment:
+            tags["Environment"] = self.environment
+        return tags
