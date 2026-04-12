@@ -211,11 +211,22 @@ install_openclaw_operator() {
 create_platform_secret() {
   log_info "Creating platform-api-config secret..."
 
+  # Validate required variables from .env
+  local missing=()
+  [[ -z "${ADMIN_EMAIL:-}" ]] && missing+=("ADMIN_EMAIL")
+  [[ -z "${ADMIN_PASSWORD:-}" ]] && missing+=("ADMIN_PASSWORD")
+  [[ -z "${JWT_SECRET:-}" ]] && missing+=("JWT_SECRET")
+  if [[ ${#missing[@]} -gt 0 ]]; then
+    log_error "Required variables not set: ${missing[*]}. Please configure them in .env"
+  fi
+
+  # Auto-populate from CDK outputs
   local db_secret_arn=$(get_stack_output "${STACK_PREFIX}-rds" "DbSecretArn")
   local db_endpoint=$(get_stack_output "${STACK_PREFIX}-rds" "DbEndpoint")
   local db_port=$(get_stack_output "${STACK_PREFIX}-rds" "DbPort")
   local db_name=$(get_stack_output "${STACK_PREFIX}-rds" "DbName")
   local queue_url=$(get_stack_output "${STACK_PREFIX}-sqs" "UsageQueueUrl")
+  local ecr_registry=$(get_stack_output "${STACK_PREFIX}-ecr" "PlatformRepoUriOutput" | cut -d/ -f1)
 
   # Get DB credentials from Secrets Manager
   local db_secret=$(aws secretsmanager get-secret-value --secret-id "${db_secret_arn}" --query SecretString --output text)
@@ -225,11 +236,26 @@ create_platform_secret() {
   # Create database URL
   local database_url="postgresql://${db_username}:${db_password}@${db_endpoint}:${db_port}/${db_name}"
 
-  # Create or update secret
+  # Create or update secret with all configuration
   kubectl create secret generic platform-api-config \
     -n openclaw-platform \
     --from-literal=DATABASE_URL="${database_url}" \
+    --from-literal=SQS_QUEUE_URL="${queue_url}" \
     --from-literal=USAGE_EVENTS_QUEUE_URL="${queue_url}" \
+    --from-literal=ECR_REGISTRY="${ecr_registry}" \
+    --from-literal=ADMIN_EMAIL="${ADMIN_EMAIL}" \
+    --from-literal=ADMIN_PASSWORD="${ADMIN_PASSWORD}" \
+    --from-literal=JWT_SECRET="${JWT_SECRET}" \
+    --from-literal=K8S_IN_CLUSTER="${K8S_IN_CLUSTER:-true}" \
+    --from-literal=LOG_LEVEL="${LOG_LEVEL:-INFO}" \
+    --from-literal=AWS_REGION="${AWS_REGION:-us-west-2}" \
+    --from-literal=AWS_PARTITION="${AWS_PARTITION:-aws}" \
+    --from-literal=AWS_ACCOUNT_ID="${AWS_ACCOUNT_ID:-956045422469}" \
+    --from-literal=AVAILABLE_CHANNELS="${AVAILABLE_CHANNELS:-}" \
+    --from-literal=DEFAULT_AGENT_IMAGE="${DEFAULT_AGENT_IMAGE:-}" \
+    --from-literal=DEFAULT_AGENT_IMAGE_TAG="${DEFAULT_AGENT_IMAGE_TAG:-latest}" \
+    --from-literal=METRICS_EXPORTER_REPO="${METRICS_EXPORTER_REPO:-openclaw-metrics-exporter}" \
+    --from-literal=METRICS_EXPORTER_TAG="${METRICS_EXPORTER_TAG:-v0.1.0}" \
     --dry-run=client -o yaml | kubectl apply -f -
 
   log_info "platform-api-config secret created"
@@ -320,6 +346,16 @@ verify_deployment() {
 
 main() {
   log_info "Starting OpenClaw SaaS deployment..."
+
+  # Load environment configuration
+  if [[ -f "${REPO_ROOT}/.env" ]]; then
+    log_info "Loading configuration from .env"
+    set -a
+    source "${REPO_ROOT}/.env"
+    set +a
+  else
+    log_warn "No .env file found. Using defaults. Copy .env.example to .env for custom config."
+  fi
 
   check_prerequisites
 

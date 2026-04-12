@@ -94,11 +94,21 @@ contracts/        Shared conventions and schemas
 - `kubectl`, `helm`, `aws-cdk` installed
 - Docker for building platform image
 
+### Configure Environment
+
+```bash
+# 0. Create .env from template and edit
+cd infra
+cp .env.example .env
+vim .env    # Must set: ADMIN_EMAIL, ADMIN_PASSWORD, JWT_SECRET
+            # Optional: AWS_REGION, LOG_LEVEL, etc. (defaults work for us-west-2)
+```
+
 ### Deploy Infrastructure
 
 ```bash
 # 1. Bootstrap CDK (first time only)
-cd infra/cdk
+cd cdk
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
@@ -120,8 +130,8 @@ CLUSTER_NAME=$(aws cloudformation describe-stacks \
   --output text)
 aws eks update-kubeconfig --name ${CLUSTER_NAME} --region us-west-2
 
-# 4. Install K8s components
-cd ../../infra
+# 4. Install K8s components (reads .env automatically)
+cd ..    # back to infra/
 ./scripts/deploy.sh --skip-cdk
 
 # 5. Access platform

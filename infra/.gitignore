@@ -6,3 +6,6 @@ cdk.context.json
 *.egg-info/
 .cache/
 node_modules/
+
+# Environment configuration (contains secrets)
+.env
