@@ -117,9 +117,13 @@ deploy_cdk() {
   # Get project name and environment from cdk.json
   PROJECT_NAME=$(jq -r '.context.project_name' cdk.json)
   ENVIRONMENT=$(jq -r '.context.environment' cdk.json)
-  STACK_PREFIX="${PROJECT_NAME}-${ENVIRONMENT}"
+  if [[ -n "${ENVIRONMENT}" ]]; then
+    STACK_PREFIX="${PROJECT_NAME}-${ENVIRONMENT}"
+  else
+    STACK_PREFIX="${PROJECT_NAME}"
+  fi
 
-  log_info "Project: ${PROJECT_NAME}, Environment: ${ENVIRONMENT}"
+  log_info "Project: ${PROJECT_NAME}, Environment: ${ENVIRONMENT:-<none>}, Stack prefix: ${STACK_PREFIX}"
 
   # Bootstrap CDK (if not already done)
   log_info "Bootstrapping CDK..."
@@ -253,20 +257,18 @@ deploy_platform_api() {
   local platform_image="${ecr_repo_uri}:${PLATFORM_VERSION}"
   log_info "Using platform image: ${platform_image}"
 
-  # Get ACM cert ARN and domain name
+  # Get ACM cert ARN and domain name (optional — only needed for ALB mode)
   local acm_cert_arn=$(get_stack_output "${STACK_PREFIX}-dns" "CertificateArn" || echo "")
   local domain_name=$(get_stack_output "${STACK_PREFIX}-dns" "DomainName" || echo "")
 
-  if [[ -z "${acm_cert_arn}" ]] || [[ -z "${domain_name}" ]]; then
-    log_warn "No custom domain configured, using ALB default DNS"
-    acm_cert_arn="none"
-    domain_name="*"
-  fi
-
   # Apply K8s manifests with substitution
+  # NLB mode (default): only PLATFORM_IMAGE is required
+  # ALB mode: set ACM_CERT_ARN and DOMAIN_NAME for ALB ingress with HTTPS
   export PLATFORM_IMAGE="${platform_image}"
-  export ACM_CERT_ARN="${acm_cert_arn}"
-  export DOMAIN_NAME="${domain_name}"
+  if [[ -n "${acm_cert_arn}" && -n "${domain_name}" ]]; then
+    export ACM_CERT_ARN="${acm_cert_arn}"
+    export DOMAIN_NAME="${domain_name}"
+  fi
 
   cd "${REPO_ROOT}/k8s/platform"
   bash apply.sh
@@ -301,13 +303,16 @@ verify_deployment() {
   log_info "Platform API pod: ${pod_name}"
   kubectl get pod -n openclaw-platform "${pod_name}"
 
-  # Get ingress URL
-  local ingress_host=$(kubectl get ingress platform-ingress -n openclaw-platform -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+  # Check for NLB or ALB ingress
+  local nlb_host=$(kubectl get svc platform-api -n openclaw-platform -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
+  local ingress_host=$(kubectl get ingress platform-ingress -n openclaw-platform -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
 
   if [[ -n "${ingress_host}" ]]; then
-    log_info "Platform API accessible at: https://${ingress_host}"
+    log_info "Platform API accessible at: https://${ingress_host} (ALB)"
+  elif [[ -n "${nlb_host}" ]]; then
+    log_info "Platform API NLB: http://${nlb_host} (CloudFront prefix list restricted)"
   else
-    log_warn "Ingress not yet ready, check with: kubectl get ingress -n openclaw-platform"
+    log_warn "No external endpoint yet, check with: kubectl get svc -n openclaw-platform"
   fi
 
   log_info "Deployment verified!"
@@ -321,7 +326,11 @@ main() {
   # Get config from cdk.json
   PROJECT_NAME=$(jq -r '.context.project_name' "${REPO_ROOT}/cdk/cdk.json")
   ENVIRONMENT=$(jq -r '.context.environment' "${REPO_ROOT}/cdk/cdk.json")
-  STACK_PREFIX="${PROJECT_NAME}-${ENVIRONMENT}"
+  if [[ -n "${ENVIRONMENT}" ]]; then
+    STACK_PREFIX="${PROJECT_NAME}-${ENVIRONMENT}"
+  else
+    STACK_PREFIX="${PROJECT_NAME}"
+  fi
 
   if [[ "${SKIP_CDK}" == "false" ]]; then
     deploy_cdk
@@ -345,7 +354,7 @@ main() {
   echo ""
   log_info "Next steps:"
   echo "  1. Check pods:    kubectl get pods -n openclaw-platform"
-  echo "  2. Check ingress: kubectl get ingress -n openclaw-platform"
+  echo "  2. Check NLB:     kubectl get svc platform-api -n openclaw-platform"
   echo "  3. View logs:     kubectl logs -n openclaw-platform -l app=platform-api -f"
 }
 

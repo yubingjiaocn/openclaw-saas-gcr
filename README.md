@@ -16,7 +16,7 @@ Multi-tenant OpenClaw SaaS platform running on Amazon EKS in **us-west-2** (Oreg
 │  │  ┌─────────────────────────────────────────────────────┐   │ │
 │  │  │ EKS Cluster (K8s 1.30)                             │   │ │
 │  │  │  • Graviton nodes (ARM64, t4g.medium)              │   │ │
-│  │  │  • ALB Ingress Controller                          │   │ │
+│  │  │  • AWS Load Balancer Controller (NLB)               │   │ │
 │  │  │  • openclaw-operator (manages OpenClawInstance)    │   │ │
 │  │  │                                                      │   │ │
 │  │  │  ┌─────────────────────────────────────────────┐   │   │ │
@@ -124,9 +124,10 @@ aws eks update-kubeconfig --name ${CLUSTER_NAME} --region us-west-2
 cd ../../infra
 ./scripts/deploy.sh --skip-cdk
 
-# 5. Access platform
-kubectl get ingress -n openclaw-platform
-# Visit the ALB DNS name or configured domain
+# 5. Access platform (NLB — restricted to CloudFront IPs only)
+kubectl get svc platform-api -n openclaw-platform
+# NLB DNS is only reachable via CloudFront (prefix list pl-82a045eb)
+# Direct curl will timeout — use CloudFront distribution to access
 ```
 
 ### Local Development
@@ -298,7 +299,7 @@ Typical monthly cost for dev/test deployment:
 - EC2 nodes (2× t4g.medium): ~$30/month
 - RDS (db.t4g.micro): ~$13/month
 - NAT Gateway: ~$32/month
-- ALB + S3 + ECR + CloudWatch: ~$20/month
+- NLB + S3 + ECR + CloudWatch: ~$20/month
 - **Total: ~$170/month**
 
 For production HA: add Multi-AZ RDS (+$13), extra NAT gateways (+$32/AZ), reserved instances (−30%).
