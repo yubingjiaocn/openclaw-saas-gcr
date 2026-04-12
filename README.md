@@ -145,22 +145,87 @@ npm install
 npm run dev
 ```
 
-## Deployment
+## Building & Pushing Images
 
-### Production Image Build
+All images are built manually (no CI/CD pipeline). The EKS cluster runs on **Graviton (ARM64)** nodes, so all images must be built for `linux/arm64`.
+
+### Version Convention
+
+All images use semantic versioning `vX.Y.Z`:
+
+| Image | Current Version | ECR Repository |
+|-------|----------------|----------------|
+| Platform API | `v0.9.20` | `956045422469.dkr.ecr.us-west-2.amazonaws.com/openclaw-saas-platform` |
+| Metrics Exporter | `v0.1.0` | `956045422469.dkr.ecr.us-west-2.amazonaws.com/openclaw-metrics-exporter` |
+| Billing Consumer | `v0.1.0` | `956045422469.dkr.ecr.us-west-2.amazonaws.com/openclaw-billing-consumer` |
+
+### ECR Login
+
+Authenticate to ECR before building/pushing (token valid for 12 hours):
 
 ```bash
-# Build and push platform image
-cd platform
-docker build -t openclaw-saas-platform:latest .
-
-ECR_REPO=956045422469.dkr.ecr.us-west-2.amazonaws.com/openclaw-saas-platform
 aws ecr get-login-password --region us-west-2 | \
-  docker login --username AWS --password-stdin ${ECR_REPO}
-
-docker tag openclaw-saas-platform:latest ${ECR_REPO}:latest
-docker push ${ECR_REPO}:latest
+  docker login --username AWS --password-stdin 956045422469.dkr.ecr.us-west-2.amazonaws.com
 ```
+
+### 1. Platform API
+
+Build context is `platform/` — includes API, billing module, and pre-built web console static files.
+
+```bash
+# Build web console first (if changed)
+cd platform/web-console
+npm install && npm run build
+cd ../..
+
+# Build and push (arm64)
+VERSION=v0.9.20
+ECR_REPO=956045422469.dkr.ecr.us-west-2.amazonaws.com/openclaw-saas-platform
+
+docker buildx build --platform linux/arm64 \
+  -t ${ECR_REPO}:${VERSION} \
+  -t ${ECR_REPO}:latest \
+  --push \
+  platform/
+```
+
+### 2. Metrics Exporter
+
+Build context is `platform/metrics-exporter/`.
+
+```bash
+VERSION=v0.1.0
+ECR_REPO=956045422469.dkr.ecr.us-west-2.amazonaws.com/openclaw-metrics-exporter
+
+docker buildx build --platform linux/arm64 \
+  -t ${ECR_REPO}:${VERSION} \
+  -t ${ECR_REPO}:latest \
+  --push \
+  platform/metrics-exporter/
+```
+
+### 3. Billing Consumer
+
+Build context is `platform/billing/`.
+
+```bash
+VERSION=v0.1.0
+ECR_REPO=956045422469.dkr.ecr.us-west-2.amazonaws.com/openclaw-billing-consumer
+
+docker buildx build --platform linux/arm64 \
+  -t ${ECR_REPO}:${VERSION} \
+  -t ${ECR_REPO}:latest \
+  --push \
+  platform/billing/
+```
+
+### Build Tips
+
+- **Buildx setup**: If `docker buildx` is not available, create a builder: `docker buildx create --use --name arm64-builder`
+- **Cross-platform on x86**: Requires QEMU: `docker run --rm --privileged multiarch/qemu-user-static --reset -p yes`
+- **Version bumps**: Update the `VERSION` variable and the version table above. Also update [VERSIONS.md](VERSIONS.md) to keep tracking consistent.
+
+## Deployment
 
 ### Update Platform Deployment
 
