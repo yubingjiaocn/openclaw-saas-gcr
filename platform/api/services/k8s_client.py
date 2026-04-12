@@ -379,7 +379,7 @@ class K8sClient:
                             "defaultAgent": "claude",
                             "agents": {
                                 "claude": {"command": "claude-agent-acp"},
-                                "kiro": {"command": "kiro-cli acp --trust-all-tools"},
+                                "kiro": {"command": "sh -c \"mkdir -p ~/.openclaw/.kiro/agents ~/.openclaw/.kiro/settings && cp -n /opt/kiro-config/agents/* ~/.openclaw/.kiro/agents/ 2>/dev/null; cp -n /opt/kiro-config/settings/* ~/.openclaw/.kiro/settings/ 2>/dev/null; export HOME=$HOME/.openclaw; exec kiro-cli acp --trust-all-tools\""},
                             },
                         }),
                     },

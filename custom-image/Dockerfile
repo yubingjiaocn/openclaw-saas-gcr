@@ -31,13 +31,19 @@ RUN curl -fsSL "https://desktop-release.q.us-east-1.amazonaws.com/${KIRO_VERSION
     && chmod +x /usr/local/bin/kiro-cli /usr/local/bin/kiro-cli-chat \
     && rm -rf /tmp/kirocli
 
-# ── Kiro agent config (read-only, image layer) ──
-# kiro-cli reads from ~/.kiro/agents/ — we put config directly there.
-# Session data writes to ~/.kiro/sessions/ on overlay (non-persistent, same as claude/codex).
-RUN mkdir -p /home/node/.kiro/agents /home/node/.kiro/settings
+# ── Kiro agent config ──
+# Two copies of kiro config:
+# 1. /home/node/.kiro/ — image layer, for non-persistent mode (fallback)
+# 2. /opt/kiro-config/ — image layer, source for persistent mode
+#
+# For persistent kiro sessions, the .acpxrc.json wrapper sets
+# HOME=~/.openclaw (PVC) and copies config from /opt/kiro-config/ first.
+RUN mkdir -p /home/node/.kiro/agents /home/node/.kiro/settings \
+    && mkdir -p /opt/kiro-config/agents /opt/kiro-config/settings
 COPY kiro-agent-config.json /home/node/.kiro/agents/kiro_default.json
-RUN echo '{"chat.defaultAgent":"kiro_default"}' > /home/node/.kiro/settings/cli.json \
-    && chown -R 1000:1000 /home/node/.kiro
+COPY kiro-agent-config.json /opt/kiro-config/agents/kiro_default.json
+RUN echo '{"chat.defaultAgent":"kiro_default"}' | tee /home/node/.kiro/settings/cli.json > /opt/kiro-config/settings/cli.json \
+    && chown -R 1000:1000 /home/node/.kiro /opt/kiro-config
 
 USER node
 
