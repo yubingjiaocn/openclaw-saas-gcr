@@ -124,10 +124,10 @@ aws eks update-kubeconfig --name ${CLUSTER_NAME} --region us-west-2
 cd ../../infra
 ./scripts/deploy.sh --skip-cdk
 
-# 5. Access platform (NLB — restricted to CloudFront IPs only)
-kubectl get svc platform-api -n openclaw-platform
-# NLB DNS is only reachable via CloudFront (prefix list pl-82a045eb)
-# Direct curl will timeout — use CloudFront distribution to access
+# 5. Access platform
+# Production URL: https://openclaw.chenxqdu.space
+# NLB is restricted to CloudFront IPs only (prefix list pl-82a045eb)
+curl https://openclaw.chenxqdu.space/health
 ```
 
 ### Local Development
@@ -310,6 +310,12 @@ For production HA: add Multi-AZ RDS (+$13), extra NAT gateways (+$32/AZ), reserv
 
 ## Production Endpoint
 
-- **Domain**: https://openclaw.chenxqdu.space
+- **URL**: https://openclaw.chenxqdu.space
+- **CloudFront Distribution**: `E3I6YEIX9MYJFW` (`d1lown43fgvuqx.cloudfront.net`)
+- **ACM Certificate**: `*.chenxqdu.space` (us-east-1, SNI)
+- **Origin**: NLB via HTTP (port 80), restricted to CloudFront prefix list `pl-82a045eb`
+- **Cache**: Disabled (CachingDisabled policy) — all requests forwarded to origin
 - **Admin**: chenxqdu@amazon.com
 - **GitHub**: duchenxi/openclaw-saas-platform (main branch)
+
+**Traffic flow**: Client → CloudFront (HTTPS, TLS 1.2+) → NLB (HTTP, port 80) → platform-api
