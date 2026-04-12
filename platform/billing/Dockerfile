@@ -8,7 +8,8 @@ RUN pip install --no-cache-dir \
     sqlalchemy \
     asyncpg
 
-# Copy application code
+# Copy version and application code
+COPY VERSION .
 COPY *.py .
 
 # Default command (can be overridden)

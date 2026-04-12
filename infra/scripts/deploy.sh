@@ -236,6 +236,15 @@ create_platform_secret() {
   # Create database URL
   local database_url="postgresql://${db_username}:${db_password}@${db_endpoint}:${db_port}/${db_name}"
 
+  # Read metrics-exporter version from VERSION file if not set
+  if [[ -z "${METRICS_EXPORTER_TAG:-}" ]]; then
+    local me_version_file="${REPO_ROOT}/platform/metrics-exporter/VERSION"
+    if [[ -f "${me_version_file}" ]]; then
+      METRICS_EXPORTER_TAG="v$(cat "${me_version_file}" | tr -d '[:space:]')"
+      log_info "Read metrics-exporter version from VERSION file: ${METRICS_EXPORTER_TAG}"
+    fi
+  fi
+
   # Create or update secret with all configuration
   kubectl create secret generic platform-api-config \
     -n openclaw-platform \
@@ -273,11 +282,17 @@ deploy_platform_api() {
 
   # Determine image version
   if [[ -z "${PLATFORM_VERSION}" ]]; then
-    log_info "No version specified, using latest from ECR..."
-    PLATFORM_VERSION=$(aws ecr describe-images \
-      --repository-name "${PROJECT_NAME}-${ENVIRONMENT}-platform" \
-      --query 'sort_by(imageDetails,& imagePushedAt)[-1].imageTags[0]' \
-      --output text 2>/dev/null || echo "latest")
+    local version_file="${REPO_ROOT}/platform/VERSION"
+    if [[ -f "${version_file}" ]]; then
+      PLATFORM_VERSION="v$(cat "${version_file}" | tr -d '[:space:]')"
+      log_info "Read version from platform/VERSION: ${PLATFORM_VERSION}"
+    else
+      log_info "No version specified and no VERSION file found, using latest from ECR..."
+      PLATFORM_VERSION=$(aws ecr describe-images \
+        --repository-name "${PROJECT_NAME}-${ENVIRONMENT}-platform" \
+        --query 'sort_by(imageDetails,& imagePushedAt)[-1].imageTags[0]' \
+        --output text 2>/dev/null || echo "latest")
+    fi
   fi
 
   local platform_image="${ecr_repo_uri}:${PLATFORM_VERSION}"

@@ -161,13 +161,13 @@ All images are built manually (no CI/CD pipeline). The EKS cluster runs on **Gra
 
 ### Version Convention
 
-All images use semantic versioning `vX.Y.Z`:
+All images use semantic versioning `vX.Y.Z`. Versions are defined in `VERSION` files (without `v` prefix); the `v` prefix is added at build time.
 
-| Image | Current Version | ECR Repository |
-|-------|----------------|----------------|
-| Platform API | `v0.9.20` | `956045422469.dkr.ecr.us-west-2.amazonaws.com/openclaw-saas-platform` |
-| Metrics Exporter | `v0.1.0` | `956045422469.dkr.ecr.us-west-2.amazonaws.com/openclaw-metrics-exporter` |
-| Billing Consumer | `v0.1.0` | `956045422469.dkr.ecr.us-west-2.amazonaws.com/openclaw-billing-consumer` |
+| Image | VERSION File | ECR Repository |
+|-------|-------------|----------------|
+| Platform API | `platform/VERSION` | `956045422469.dkr.ecr.us-west-2.amazonaws.com/openclaw-saas-platform` |
+| Metrics Exporter | `platform/metrics-exporter/VERSION` | `956045422469.dkr.ecr.us-west-2.amazonaws.com/openclaw-metrics-exporter` |
+| Billing Consumer | `platform/billing/VERSION` | `956045422469.dkr.ecr.us-west-2.amazonaws.com/openclaw-billing-consumer` |
 
 ### ECR Login
 
@@ -189,7 +189,7 @@ npm install && npm run build
 cd ../..
 
 # Build and push (arm64)
-VERSION=v0.9.20
+VERSION=v$(cat platform/VERSION)
 ECR_REPO=956045422469.dkr.ecr.us-west-2.amazonaws.com/openclaw-saas-platform
 
 docker buildx build --platform linux/arm64 \
@@ -204,7 +204,7 @@ docker buildx build --platform linux/arm64 \
 Build context is `platform/metrics-exporter/`.
 
 ```bash
-VERSION=v0.1.0
+VERSION=v$(cat platform/metrics-exporter/VERSION)
 ECR_REPO=956045422469.dkr.ecr.us-west-2.amazonaws.com/openclaw-metrics-exporter
 
 docker buildx build --platform linux/arm64 \
@@ -219,7 +219,7 @@ docker buildx build --platform linux/arm64 \
 Build context is `platform/billing/`.
 
 ```bash
-VERSION=v0.1.0
+VERSION=v$(cat platform/billing/VERSION)
 ECR_REPO=956045422469.dkr.ecr.us-west-2.amazonaws.com/openclaw-billing-consumer
 
 docker buildx build --platform linux/arm64 \
@@ -233,7 +233,7 @@ docker buildx build --platform linux/arm64 \
 
 - **Buildx setup**: If `docker buildx` is not available, create a builder: `docker buildx create --use --name arm64-builder`
 - **Cross-platform on x86**: Requires QEMU: `docker run --rm --privileged multiarch/qemu-user-static --reset -p yes`
-- **Version bumps**: Update the `VERSION` variable and the version table above. Also update [VERSIONS.md](VERSIONS.md) to keep tracking consistent.
+- **Version bumps**: Edit the `VERSION` file in the corresponding component directory (`platform/VERSION`, `platform/billing/VERSION`, `platform/metrics-exporter/VERSION`). Build scripts read the version automatically. Also update [VERSIONS.md](VERSIONS.md) to keep tracking consistent.
 
 ## Deployment
 
