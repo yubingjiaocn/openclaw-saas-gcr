@@ -6,10 +6,10 @@
     "@aws-cdk/aws-rds:lowercaseDbIdentifier": true,
     "@aws-cdk/aws-lambda:recognizeVersionProps": true,
     "@aws-cdk/aws-cloudfront:defaultSecurityPolicyTLSv1.2_2021": true,
-    "@aws-cdk/core:target-partitions": ["aws-cn"],
+    "@aws-cdk/core:target-partitions": ["aws"],
 
     "project_name": "openclaw-saas",
-    "environment": "dev",
+    "environment": "",
 
     "domain_name": "",
     "hosted_zone_id": "",

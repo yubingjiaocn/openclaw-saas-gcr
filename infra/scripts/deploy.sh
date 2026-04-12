@@ -145,7 +145,7 @@ configure_kubectl() {
   fi
 
   log_info "Updating kubeconfig for cluster: ${cluster_name}"
-  aws eks update-kubeconfig --name "${cluster_name}" --region "${AWS_REGION:-cn-northwest-1}"
+  aws eks update-kubeconfig --name "${cluster_name}" --region "${AWS_REGION:-us-west-2}"
 
   # Wait for cluster to be ready
   log_info "Waiting for cluster to be ready..."
@@ -165,7 +165,7 @@ install_alb_controller() {
 
   local cluster_name=$(get_stack_output "${STACK_PREFIX}-eks" "ClusterName")
   local vpc_id=$(get_stack_output "${STACK_PREFIX}-vpc" "VpcId")
-  local region="${AWS_REGION:-cn-northwest-1}"
+  local region="${AWS_REGION:-us-west-2}"
 
   # Add EKS chart repo
   helm repo add eks https://aws.github.io/eks-charts

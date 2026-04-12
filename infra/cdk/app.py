@@ -19,7 +19,7 @@ config = Config(app)
 # Get AWS account and region from environment or context
 env = cdk.Environment(
     account=os.environ.get("CDK_DEFAULT_ACCOUNT"),
-    region=os.environ.get("CDK_DEFAULT_REGION", "cn-northwest-1"),
+    region=os.environ.get("CDK_DEFAULT_REGION", "us-west-2"),
 )
 
 # Common tags for all stacks
