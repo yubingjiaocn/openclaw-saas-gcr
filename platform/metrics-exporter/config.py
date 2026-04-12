@@ -11,7 +11,7 @@ class Config:
 
     # SQS configuration
     SQS_QUEUE_URL = os.getenv("SQS_QUEUE_URL", "")
-    AWS_DEFAULT_REGION = os.getenv("AWS_DEFAULT_REGION", "cn-northwest-1")
+    AWS_DEFAULT_REGION = os.getenv("AWS_DEFAULT_REGION", "us-west-2")
 
     # Scanning configuration
     SCAN_INTERVAL_SECONDS = int(os.getenv("SCAN_INTERVAL_SECONDS", "30"))

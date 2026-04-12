@@ -5,7 +5,7 @@ set -euo pipefail
 # Usage: ./apply.sh
 #
 # Required environment variables:
-#   PLATFORM_IMAGE    - Platform API container image (e.g., 735091234506.dkr.ecr.cn-northwest-1.amazonaws.com.cn/openclaw-saas-platform:v0.4.2)
+#   PLATFORM_IMAGE    - Platform API container image (e.g., 956045422469.dkr.ecr.us-west-2.amazonaws.com/openclaw-saas-platform:v0.4.2)
 #   ACM_CERT_ARN      - ACM certificate ARN for ALB ingress
 #   DOMAIN_NAME       - Custom domain name for ingress
 
