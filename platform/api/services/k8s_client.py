@@ -430,13 +430,7 @@ class K8sClient:
                             "requests": {"cpu": "25m", "memory": "64Mi"},
                             "limits": {"cpu": "100m", "memory": "128Mi"},
                         },
-                        "volumeMounts": [
-                            {
-                                "name": "data",
-                                "mountPath": "/home/openclaw/.openclaw",
-                                "readOnly": True,
-                            }
-                        ],
+
                         "securityContext": {
                             "runAsNonRoot": True,
                             "runAsUser": 1000,
