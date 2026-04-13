@@ -364,7 +364,7 @@ class K8sClient:
                     "pullPolicy": "Always",
                 }} if effective_image else {}),
                 "envFrom": [{"secretRef": {"name": f"{agent_name}-keys"}}],
-                "env": [{"name": "NODE_OPTIONS", "value": "--max-old-space-size=1536"}],
+                "env": [{"name": "NODE_OPTIONS", "value": "--max-old-space-size=3072"}],
                 "config": {
                     "mergeMode": "merge",
                     "raw": raw_config,
