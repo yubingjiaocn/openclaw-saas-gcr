@@ -118,10 +118,10 @@ cd infra
 export AWS_PROFILE=cn AWS_DEFAULT_REGION=cn-northwest-1
 
 # Option A: Use deploy.sh (skip CDK if already done)
-./scripts/deploy.sh --skip-cdk --platform-version v0.9.50
+./scripts/deploy.sh --skip-cdk --platform-version v0.9.51
 
 # Option B: Manual deployment (more control)
-export PLATFORM_IMAGE="735091234506.dkr.ecr.cn-northwest-1.amazonaws.com.cn/openclaw-saas-platform:v0.9.50"
+export PLATFORM_IMAGE="735091234506.dkr.ecr.cn-northwest-1.amazonaws.com.cn/openclaw-saas-platform:v0.9.51"
 
 # Install ALB Controller
 helm upgrade --install aws-load-balancer-controller eks/aws-load-balancer-controller \
@@ -201,8 +201,10 @@ aws cloudformation delete-stack --stack-name openclaw-saas-vpc
 | Component | Status | Details |
 |-----------|--------|---------|
 | EKS | ✅ | `openclaw-saas-cluster`, K8s 1.30, 2× Graviton |
-| Platform API | ✅ | `v0.9.50` (CN private ECR) |
+| Platform API | ✅ | `v0.9.51` (CN private ECR) |
 | Operator | ✅ | v0.20.0 (Helm OCI) |
+| Metrics Exporter | ✅ | v0.3.0 (scrapes otel-collector) |
+| Billing Consumer | ✅ | v0.1.0 |
 | ALB Controller | ✅ | kube-system |
 | RDS | ✅ | PostgreSQL t4g.micro |
 
