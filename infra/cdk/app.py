@@ -17,9 +17,17 @@ app = cdk.App()
 config = Config(app)
 
 # Get AWS account and region from environment or context
+# Note: CDK CLI sets CDK_DEFAULT_REGION from the default AWS profile, not --profile.
+# For CN deployments, always set AWS_DEFAULT_REGION=cn-northwest-1 in your shell,
+# or set aws_region in cdk.json context.
+_region = os.environ.get("CDK_DEFAULT_REGION", "us-west-2")
+_ctx_region = app.node.try_get_context("aws_region")
+if _ctx_region:
+    _region = _ctx_region
+
 env = cdk.Environment(
     account=os.environ.get("CDK_DEFAULT_ACCOUNT"),
-    region=os.environ.get("CDK_DEFAULT_REGION", "cn-northwest-1"),
+    region=_region,
 )
 
 # Common tags for all stacks
@@ -65,22 +73,21 @@ s3_stack = S3Stack(
     description="OpenClaw SaaS S3 buckets for backups",
 )
 
-# DNS/ACM Stack (optional, only if domain configured)
+# DNS/CloudFront Stack (optional, only if domain configured)
 if config.has_custom_domain:
     dns_stack = DnsStack(
         app,
         f"{config.stack_prefix}-dns",
         config=config,
+        vpc=vpc_stack.vpc,
         env=env,
-        description="OpenClaw SaaS DNS and ACM certificate",
+        description="OpenClaw SaaS CloudFront, DNS, and NLB security group",
     )
+    dns_stack.add_dependency(vpc_stack)
 
 # ========== EKS and Related ==========
 
 # EKS Stack (depends on VPC)
-# Note: Bedrock is NOT available in AWS China regions.
-# No bedrock_policy_arn is passed to EKS.
-
 eks_stack = EksStack(
     app,
     f"{config.stack_prefix}-eks",
