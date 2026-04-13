@@ -133,8 +133,8 @@ LLM_PROVIDERS = {
     },
     "bedrock-apikey": {
         "name": "AWS Bedrock (API Key)",
-        "env_keys": ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"],
-        "optional_keys": ["AWS_SESSION_TOKEN", "AWS_DEFAULT_REGION"],
+        "env_keys": ["AWS_BEARER_TOKEN_BEDROCK"],
+        "optional_keys": ["AWS_DEFAULT_REGION"],
         "default_model": "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
         "models": [
             {"id": "global.anthropic.claude-opus-4-6-v1", "name": "Claude Opus 4.6"},
