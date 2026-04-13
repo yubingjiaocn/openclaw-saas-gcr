@@ -1,3 +1,24 @@
 __pycache__/
 *.pyc
+
+# Environment files (contain secrets)
+.env
+infra/.env
+infra/cdk/.env
+
+# CDK auto-generated
 cdk.context.json
+infra/cdk/cdk.out/
+
+# Node
+node_modules/
+platform/web-console/node_modules/
+platform/web-console/dist/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
