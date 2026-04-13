@@ -244,6 +244,7 @@ class K8sClient:
         #    - For bedrock: need explicit provider config
         model_prefix = {
             "bedrock": f"amazon-bedrock/{model}",
+            "bedrock-irsa": f"amazon-bedrock/{model}",
             "bedrock-apikey": f"amazon-bedrock/{model}",
             "openai": model,
             "anthropic": model,

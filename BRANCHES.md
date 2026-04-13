@@ -55,7 +55,21 @@
 | `security.readOnlyRootFilesystem` | `false` | `false` | `false` |
 | `NODE_OPTIONS` | `--max-old-space-size=1536` | `--max-old-space-size=1536` | `--max-old-space-size=3072` |
 
-### 5. 平台配置 (config.py)
+### 5. LLM Providers
+
+| Provider | main | cn | cn-workshop |
+|----------|------|----|-------------|
+| `bedrock` (AWS AK/SK + Region) | ✅ | ✅ | ✅ |
+| `bedrock-irsa` (Platform Managed, 无需 key) | ✅ **默认** | ❌ (无 IRSA) | ❌ |
+| `bedrock-apikey` (IAM AK/SK, region optional) | ✅ | ✅ | ✅ |
+| `openai` | ✅ | ✅ | ✅ |
+| `anthropic` | ✅ | ✅ | ✅ |
+| `openai-compatible` | ✅ | ✅ **默认** | ✅ **默认** |
+
+> **bedrock-irsa** 仅适用于 Global (main)：EKS node role 通过 IRSA 自动获得 Bedrock 权限，
+> 用户创建 agent 时无需提供任何 API key。CN 区不支持 IRSA + Bedrock，故不可用。
+
+### 6. 平台配置 (config.py)
 
 | 配置项 | main | cn | cn-workshop |
 |--------|------|----|-------------|
@@ -65,7 +79,7 @@
 | `SQS_QUEUE_URL` | us-west-2 queue | cn-northwest-1 queue | us-west-2 queue |
 | `ECR_REGISTRY` | us-west-2 ECR | cn-northwest-1 ECR | us-west-2 ECR |
 
-### 6. cn-workshop 额外内容
+### 7. cn-workshop 额外内容
 
 cn-workshop 分支在 cn 基础上额外包含：
 
