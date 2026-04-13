@@ -38,6 +38,13 @@ SKIP_CDK=false
 SKIP_K8S=false
 PLATFORM_VERSION=""
 
+# Load .env file if present
+ENV_FILE="${SCRIPT_DIR}/../.env"
+if [[ -f "${ENV_FILE}" ]]; then
+  echo -e "\033[0;32m==>\033[0m Loading configuration from ${ENV_FILE}"
+  set -a; source "${ENV_FILE}"; set +a
+fi
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -360,7 +367,9 @@ main() {
   # Get config from cdk.json
   PROJECT_NAME=$(jq -r '.context.project_name' "${REPO_ROOT}/cdk/cdk.json")
   ENVIRONMENT=$(jq -r '.context.environment' "${REPO_ROOT}/cdk/cdk.json")
-  STACK_PREFIX="${PROJECT_NAME}-${ENVIRONMENT}"
+  if [[ -n "${ENVIRONMENT}" ]]; then STACK_PREFIX="${PROJECT_NAME}-${ENVIRONMENT}"; else STACK_PREFIX="${PROJECT_NAME}"; fi
+
+  log_info "Project: ${PROJECT_NAME}, Environment: ${ENVIRONMENT:-<none>}, Stack prefix: ${STACK_PREFIX}"
 
   if [[ "${SKIP_CDK}" == "false" ]]; then
     deploy_cdk

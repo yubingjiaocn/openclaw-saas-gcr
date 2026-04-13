@@ -12,9 +12,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Validate required variables
-: "${PLATFORM_IMAGE:?PLATFORM_IMAGE is required}"
-: "${ACM_CERT_ARN:?ACM_CERT_ARN is required}"
-: "${DOMAIN_NAME:?DOMAIN_NAME is required}"
+: "${PLATFORM_IMAGE:?PLATFORM_IMAGE is required - set to the full ECR image URI with tag}"
+: "${ACM_CERT_ARN:?ACM_CERT_ARN is required - set to the ACM certificate ARN for ALB ingress}"
+: "${DOMAIN_NAME:?DOMAIN_NAME is required - set to the custom domain name or '*' for default}"
 
 echo "==> Applying OpenClaw platform manifests..."
 echo "    Platform Image: ${PLATFORM_IMAGE}"
@@ -22,10 +22,26 @@ echo "    ACM Cert ARN:   ${ACM_CERT_ARN}"
 echo "    Domain Name:    ${DOMAIN_NAME}"
 
 # Apply manifests with variable substitution
-for manifest in namespace.yaml rbac.yaml service.yaml deployment.yaml ingress.yaml; do
+MANIFESTS=(namespace.yaml rbac.yaml service.yaml deployment.yaml ingress.yaml)
+FAILED=()
+
+for manifest in "${MANIFESTS[@]}"; do
+  if [[ ! -f "${SCRIPT_DIR}/${manifest}" ]]; then
+    echo "    WARNING: ${manifest} not found, skipping"
+    continue
+  fi
   echo "    Applying ${manifest}..."
-  envsubst < "${SCRIPT_DIR}/${manifest}" | kubectl apply -f -
+  if ! envsubst < "${SCRIPT_DIR}/${manifest}" | kubectl apply -f -; then
+    echo "    ERROR: Failed to apply ${manifest}"
+    FAILED+=("${manifest}")
+  fi
 done
+
+if [[ ${#FAILED[@]} -gt 0 ]]; then
+  echo ""
+  echo "==> ERROR: Failed to apply: ${FAILED[*]}"
+  exit 1
+fi
 
 echo "==> Platform manifests applied successfully!"
 echo ""
