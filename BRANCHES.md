@@ -53,7 +53,7 @@
 | `workspace.initialFiles` | 无 | `.acpxrc.json` | 同 cn |
 | init container | 无 | 无 | 同 cn |
 | `security.readOnlyRootFilesystem` | `false` | `false` | `false` |
-| `NODE_OPTIONS` | `--max-old-space-size=1536` | `--max-old-space-size=1536` | `--max-old-space-size=3072` |
+| `NODE_OPTIONS` | `--max-old-space-size=3072` | `--max-old-space-size=3072` | `--max-old-space-size=3072` |
 
 ### 5. LLM Providers
 

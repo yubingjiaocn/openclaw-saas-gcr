@@ -1,396 +1,250 @@
-# OpenClaw SaaS on Amazon EKS
+# OpenClaw SaaS on EKS
 
-Multi-tenant OpenClaw SaaS platform running on Amazon EKS in **us-west-2** (Oregon).
-
-> **Other regions**: This is the main branch for Global region deployment. For China region deployments, see the `cn` and `cn-workshop` branches.
+Multi-tenant OpenClaw SaaS platform on AWS EKS. Supports Global (us-west-2) and China (cn-northwest-1) regions.
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                         AWS Account                              │
-│                       956045422469 (us-west-2)                   │
-│  ┌────────────────────────────────────────────────────────────┐ │
-│  │ VPC (2 AZs, Private/Public Subnets, NAT Gateway)           │ │
-│  │                                                              │ │
-│  │  ┌─────────────────────────────────────────────────────┐   │ │
-│  │  │ EKS Cluster (K8s 1.30)                             │   │ │
-│  │  │  • Graviton nodes (ARM64, t4g.medium)              │   │ │
-│  │  │  • AWS Load Balancer Controller (NLB)               │   │ │
-│  │  │  • openclaw-operator (manages OpenClawInstance)    │   │ │
-│  │  │                                                      │   │ │
-│  │  │  ┌─────────────────────────────────────────────┐   │   │ │
-│  │  │  │ openclaw-platform namespace                │   │   │ │
-│  │  │  │  • platform-api (FastAPI)                  │   │   │ │
-│  │  │  │  • web-console (React frontend)            │   │   │ │
-│  │  │  └─────────────────────────────────────────────┘   │   │ │
-│  │  │                                                      │   │ │
-│  │  │  ┌─────────────────────────────────────────────┐   │   │ │
-│  │  │  │ tenant-{name} namespaces (isolated)        │   │   │ │
-│  │  │  │  • OpenClawInstance CRDs                   │   │   │ │
-│  │  │  │  • StatefulSets (agent pods)               │   │   │ │
-│  │  │  │  • PVCs, NetworkPolicy, ResourceQuota      │   │   │ │
-│  │  │  └─────────────────────────────────────────────┘   │   │ │
-│  │  └─────────────────────────────────────────────────────┘   │ │
-│  └────────────────────────────────────────────────────────────┘ │
-│                                                                   │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
-│  │     RDS      │  │     SQS      │  │     ECR      │          │
-│  │ PostgreSQL16 │  │ (usage queue)│  │  (3 repos)   │          │
-│  └──────────────┘  └──────────────┘  └──────────────┘          │
-└───────────────────────────────────────────────────────────────────┘
+                    Internet
+                       │
+                  CloudFront (Global) / NLB (CN)
+                       │
+                ┌──────┴──────┐
+                │  EKS Cluster │
+                │  (Graviton)  │
+                └──────┬──────┘
+         ┌─────────────┼─────────────┐
+         │             │             │
+   ┌─────┴─────┐  ┌───┴───┐  ┌─────┴─────┐
+   │ Platform   │  │Operator│  │  Tenant   │
+   │ API + UI   │  │(Helm)  │  │ Namespaces│
+   └─────┬─────┘  └───┬───┘  └─────┬─────┘
+         │             │             │
+         │        Creates CRD   ┌───┴────────┐
+         │             │        │ Agent Pod   │
+         │             └──────► │ ├ openclaw  │
+         │                      │ ├ otel-coll.│
+         │                      │ ├ metrics-  │
+         │                      │ │ exporter  │
+         │                      │ └ gw-proxy  │
+    ┌────┴────┐                 └───┬────────┘
+    │ RDS     │                     │
+    │ Postgres│              otel-collector
+    └─────────┘              :9090/metrics
+         │                          │
+    ┌────┴────┐              ┌──────┴──────┐
+    │ SQS     │◄─────────────│metrics-exp. │
+    │ Queue   │  usage deltas│(scrape+push)│
+    └────┬────┘              └─────────────┘
+         │
+    ┌────┴────┐
+    │ Billing │
+    │Consumer │
+    └─────────┘
 ```
 
-**Core Features:**
-- Multi-tenant SaaS with per-tenant namespace isolation
-- K8s Operator for declarative OpenClaw instance lifecycle
-- Usage-based billing pipeline (Prometheus → SQS → aggregator)
-- Web console for tenant/agent management
-- ResourceQuota + NetworkPolicy + LimitRange per tenant
-- IRSA for AWS service access (SQS, ECR, CloudWatch)
-
-## Repository Structure
-
-```
-platform/         Management API, Web Console, Billing, Metrics Exporter
-  ├── api/        FastAPI backend (tenant/agent CRUD, K8s client)
-  ├── web-console/ React frontend (admin console)
-  ├── billing/    SQS consumer + usage aggregator
-  └── metrics-exporter/ Sidecar for agent pods (Prometheus + SQS)
-
-infra/            Infrastructure as Code + K8s manifests
-  ├── cdk/        AWS CDK stacks (VPC, EKS, RDS, SQS, ECR, IAM)
-  ├── k8s-platform/ K8s manifests for platform components
-  ├── scripts/    Automated deployment scripts
-  ├── observability/ Prometheus, Grafana, Loki
-  └── cicd/       GitHub Actions workflows
-
-contracts/        Shared conventions and schemas
-  ├── crd-conventions.md CRD labels, naming, metrics standards
-  ├── api-specs/  OpenAPI specifications
-  └── event-schemas/ SQS event JSON schemas
-```
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|------------|
-| **Container Orchestration** | Kubernetes 1.30 (Amazon EKS) |
-| **Compute** | Graviton (ARM64) nodes |
-| **Backend** | Python FastAPI + asyncio |
-| **Frontend** | React (Vite) |
-| **Database** | PostgreSQL 16 (RDS) |
-| **Queue** | Amazon SQS |
-| **Storage** | EBS (K8s PVCs), S3 (backups) |
-| **Observability** | Prometheus, Grafana, Loki |
-| **IaC** | AWS CDK (Python) |
-| **Operator** | openclaw-operator (Helm chart) |
+| | Global (`main`) | China (`cn`) |
+|---|---|---|
+| **Region** | us-west-2 | cn-northwest-1 |
+| **Account** | 956045422469 | 735091234506 |
+| **Partition** | `aws` | `aws-cn` |
+| **Default LLM** | bedrock-irsa (no API key needed) | openai-compatible |
+| **Agent Image** | Upstream openclaw (operator default) | Custom (pre-installed tools) |
+| **Channels** | All | Feishu |
+| **Ingress** | NLB + CloudFront | NLB |
 
 ## Quick Start
 
-### Prerequisites
-
-- AWS CLI configured for account `956045422469`
-- `kubectl`, `helm`, `aws-cdk` installed
-- Docker for building platform image
-
-### Configure Environment
+### 1. Configure Environment
 
 ```bash
-# 0. Create .env from template and edit
 cd infra
-cp .env.example .env
-vim .env    # Must set: ADMIN_EMAIL, ADMIN_PASSWORD, JWT_SECRET
-            # Optional: AWS_REGION, LOG_LEVEL, etc. (defaults work for us-west-2)
+
+# Pick your environment template:
+cp .env.global .env   # Global (us-west-2)
+# or
+cp .env.cn .env       # China (cn-northwest-1)
+
+# Fill in required credentials:
+vim .env              # Set ADMIN_PASSWORD, JWT_SECRET
 ```
 
-### Deploy Infrastructure
+All deployment config lives in `.env`. No hardcoded values elsewhere.
+
+### 2. Deploy Infrastructure (CDK)
 
 ```bash
-# 1. Bootstrap CDK (first time only)
-cd cdk
+cd infra/cdk
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
-export CDK_DEFAULT_ACCOUNT=956045422469
-export CDK_DEFAULT_REGION=us-west-2
-cdk bootstrap
+# Bootstrap (first time only)
+cdk bootstrap aws://<ACCOUNT_ID>/<REGION>
 
-# 2. Deploy all stacks
-cdk deploy --all --require-approval never
+# Deploy stacks (step by step to avoid OOM):
+cdk deploy openclaw-saas-vpc --require-approval never
+cdk deploy openclaw-saas-ecr openclaw-saas-sqs openclaw-saas-s3 --require-approval never --concurrency 3
+cdk deploy openclaw-saas-eks --require-approval never                    # ~15 min
+cdk deploy openclaw-saas-iam openclaw-saas-rds --require-approval never --concurrency 2
 ```
 
-### Deploy Platform
+**CDK Stacks:** vpc, ecr, sqs, s3, eks (K8s 1.30, Graviton), iam, rds (PostgreSQL), cloudfront (Global only)
+
+### 3. Build & Push Images
 
 ```bash
-# 3. Configure kubectl
-CLUSTER_NAME=$(aws cloudformation describe-stacks \
-  --stack-name openclaw-saas-dev-eks \
-  --query "Stacks[0].Outputs[?OutputKey=='ClusterName'].OutputValue" \
-  --output text)
-aws eks update-kubeconfig --name ${CLUSTER_NAME} --region us-west-2
+ECR=<ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com
+aws ecr get-login-password --region <REGION> | docker login --username AWS --password-stdin $ECR
 
-# 4. Install K8s components (reads .env automatically)
-cd ..    # back to infra/
+# Platform API
+docker buildx build --platform linux/arm64 \
+  -t $ECR/openclaw-saas-platform:v$(cat platform/VERSION) --push platform/
+
+# Metrics Exporter
+docker buildx build --platform linux/arm64 \
+  -t $ECR/openclaw-saas-metrics-exporter:v$(cat platform/metrics-exporter/VERSION) --push platform/metrics-exporter/
+
+# Billing Consumer
+docker buildx build --platform linux/arm64 \
+  -t $ECR/openclaw-saas-billing-consumer:v$(cat platform/billing/VERSION) --push platform/billing/
+```
+
+### 4. Deploy Platform
+
+```bash
+cd infra
+./scripts/deploy.sh
+# or skip CDK if already deployed:
 ./scripts/deploy.sh --skip-cdk
-
-# 5. Access platform
-# Production URL: https://openclaw.chenxqdu.space
-# NLB is restricted to CloudFront IPs only (prefix list pl-82a045eb)
-curl https://openclaw.chenxqdu.space/health
 ```
 
-### Local Development
+`deploy.sh` handles: kubectl config → ALB Controller → OpenClaw Operator → K8s Secret → Platform API → CloudFront → DB migration → verification.
+
+### 5. Verify
 
 ```bash
-# Platform API (local)
-cd platform/api
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r ../requirements.txt
-uvicorn api.main:app --reload
-
-# Web Console (local)
-cd platform/web-console
-npm install
-npm run dev
+kubectl get pods -n openclaw-platform
+curl https://openclaw.chenxqdu.space/health   # Global
+# or
+kubectl port-forward -n openclaw-platform svc/platform-api 8000:80
+curl http://localhost:8000/health
+# {"status":"ok","version":"0.9.55"}
 ```
-
-## Building & Pushing Images
-
-All images are built manually (no CI/CD pipeline). The EKS cluster runs on **Graviton (ARM64)** nodes, so all images must be built for `linux/arm64`.
-
-### Version Convention
-
-All images use semantic versioning `vX.Y.Z`. Versions are defined in `VERSION` files (without `v` prefix); the `v` prefix is added at build time.
-
-| Image | VERSION File | ECR Repository |
-|-------|-------------|----------------|
-| Platform API | `platform/VERSION` | `956045422469.dkr.ecr.us-west-2.amazonaws.com/openclaw-saas-platform` |
-| Metrics Exporter | `platform/metrics-exporter/VERSION` | `956045422469.dkr.ecr.us-west-2.amazonaws.com/openclaw-metrics-exporter` |
-| Billing Consumer | `platform/billing/VERSION` | `956045422469.dkr.ecr.us-west-2.amazonaws.com/openclaw-billing-consumer` |
-
-### ECR Login
-
-Authenticate to ECR before building/pushing (token valid for 12 hours):
-
-```bash
-aws ecr get-login-password --region us-west-2 | \
-  docker login --username AWS --password-stdin 956045422469.dkr.ecr.us-west-2.amazonaws.com
-```
-
-### 1. Platform API
-
-Build context is `platform/` — includes API, billing module, and pre-built web console static files.
-
-```bash
-# Build web console first (if changed)
-cd platform/web-console
-npm install && npm run build
-cd ../..
-
-# Build and push (arm64)
-VERSION=v$(cat platform/VERSION)
-ECR_REPO=956045422469.dkr.ecr.us-west-2.amazonaws.com/openclaw-saas-platform
-
-docker buildx build --platform linux/arm64 \
-  -t ${ECR_REPO}:${VERSION} \
-  -t ${ECR_REPO}:latest \
-  --push \
-  platform/
-```
-
-### 2. Metrics Exporter
-
-Build context is `platform/metrics-exporter/`.
-
-```bash
-VERSION=v$(cat platform/metrics-exporter/VERSION)
-ECR_REPO=956045422469.dkr.ecr.us-west-2.amazonaws.com/openclaw-metrics-exporter
-
-docker buildx build --platform linux/arm64 \
-  -t ${ECR_REPO}:${VERSION} \
-  -t ${ECR_REPO}:latest \
-  --push \
-  platform/metrics-exporter/
-```
-
-### 3. Billing Consumer
-
-Build context is `platform/billing/`.
-
-```bash
-VERSION=v$(cat platform/billing/VERSION)
-ECR_REPO=956045422469.dkr.ecr.us-west-2.amazonaws.com/openclaw-billing-consumer
-
-docker buildx build --platform linux/arm64 \
-  -t ${ECR_REPO}:${VERSION} \
-  -t ${ECR_REPO}:latest \
-  --push \
-  platform/billing/
-```
-
-### Build Tips
-
-- **Buildx setup**: If `docker buildx` is not available, create a builder: `docker buildx create --use --name arm64-builder`
-- **Cross-platform on x86**: Requires QEMU: `docker run --rm --privileged multiarch/qemu-user-static --reset -p yes`
-- **Version bumps**: Edit the `VERSION` file in the corresponding component directory (`platform/VERSION`, `platform/billing/VERSION`, `platform/metrics-exporter/VERSION`). Build scripts read the version automatically. Also update [VERSIONS.md](VERSIONS.md) to keep tracking consistent.
-
-## Deployment
-
-### Update Platform Deployment
-
-```bash
-kubectl rollout restart deployment/platform-api -n openclaw-platform
-kubectl rollout status deployment/platform-api -n openclaw-platform
-```
-
-## Key Components
-
-### Platform API
-Management API for tenant/agent lifecycle, deployed to `openclaw-platform` namespace.
-
-**Endpoints:**
-- `POST /api/v1/tenants` - Create tenant (namespace + RBAC + quotas)
-- `POST /api/v1/tenants/{id}/agents` - Create agent (OpenClawInstance CRD)
-- `GET /api/v1/tenants/{id}/agents/{agent_id}/logs` - Stream pod logs
-- `GET /api/v1/usage` - Query billing/usage metrics
-
-**Configuration:** Secret `platform-api-config` with DATABASE_URL, SQS_QUEUE_URL, AWS_REGION, ECR_REGISTRY
-
-### Metrics Exporter
-Sidecar container injected into each agent pod. Scans `~/.openclaw/usage/*.json` files and pushes events to SQS.
-
-**Environment:** TENANT_NAME, AGENT_NAME, SQS_QUEUE_URL, AWS_DEFAULT_REGION
-
-### Billing Consumer
-Standalone deployment that consumes SQS usage events and aggregates into `usage_events` table.
-
-**Environment:** SQS_QUEUE_URL, DATABASE_URL, AWS_DEFAULT_REGION
-
-### Web Console
-React SPA served via platform-api at `/` (static files). Provides admin UI for tenant/agent management.
-
-**Build:** `npm run build` → `platform/web-console/dist/`
 
 ## Configuration
 
-All platform configuration is managed via K8s Secret `platform-api-config`:
+### Single Source of Truth: `.env`
 
-| Key | Description | Default (main) |
-|-----|-------------|----------------|
-| `AWS_REGION` | AWS region | `us-west-2` |
-| `AWS_PARTITION` | AWS partition | `aws` |
-| `AWS_ACCOUNT_ID` | AWS account ID | `956045422469` |
-| `ECR_REGISTRY` | ECR domain | `956045422469.dkr.ecr.us-west-2.amazonaws.com` |
-| `SQS_QUEUE_URL` | Usage events queue | (from CDK output) |
-| `DATABASE_URL` | PostgreSQL connection string | (from CDK output) |
-| `AVAILABLE_CHANNELS` | Message channels (empty = all) | `` (all enabled) |
-| `DEFAULT_AGENT_IMAGE` | Custom agent image (empty = use operator default) | `` (use ghcr.io/openclaw/openclaw) |
+All deployment configuration is centralized in `infra/.env`:
 
-## Operations
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `ADMIN_EMAIL` | ✅ | Admin account email |
+| `ADMIN_PASSWORD` | ✅ | Admin account password |
+| `JWT_SECRET` | ✅ | JWT signing secret (`openssl rand -hex 32`) |
+| `AWS_REGION` | ✅ | Target AWS region |
+| `AWS_PARTITION` | ✅ | `aws` or `aws-cn` |
+| `AWS_ACCOUNT_ID` | ✅ | AWS account ID |
+| `METRICS_EXPORTER_REPO` | ✅ | ECR repo name for metrics-exporter |
+| `METRICS_EXPORTER_TAG` | ✅ | metrics-exporter image tag |
+| `K8S_IN_CLUSTER` | | Default: `true` |
+| `LOG_LEVEL` | | Default: `INFO` |
+| `AVAILABLE_CHANNELS` | | Empty = all, or comma-separated |
+| `DEFAULT_AGENT_IMAGE` | | Empty = operator default |
+| `DEFAULT_AGENT_IMAGE_TAG` | | Default: `latest` |
+| `PLATFORM_VERSION` | | Platform API version tag |
 
-### Scale EKS Nodes
+Auto-populated by `deploy.sh` from CDK outputs: `DATABASE_URL`, `SQS_QUEUE_URL`, `ECR_REGISTRY`.
 
-```bash
-aws eks update-nodegroup-config \
-  --cluster-name ${CLUSTER_NAME} \
-  --nodegroup-name GravitonNodes \
-  --scaling-config minSize=2,maxSize=10,desiredSize=5
+### CDK Context (`cdk.json`)
+
+Infrastructure-level settings (instance types, cluster size, domain) are in `infra/cdk/cdk.json`.
+
+## Components
+
+### Platform API (`platform/`)
+
+FastAPI backend + React web console. Manages tenants, agents, channels, billing.
+
+- **Version:** v0.9.55
+- **Image:** `openclaw-saas-platform:v0.9.55`
+
+### Metrics Exporter (`platform/metrics-exporter/`)
+
+Sidecar that scrapes otel-collector Prometheus endpoint, computes usage deltas, pushes to SQS for billing.
+
+- **Version:** v0.3.0
+- **Image:** `openclaw-saas-metrics-exporter:v0.3.0`
+- **Data flow:** otel-collector `:9090/metrics` → delta computation → SQS
+
+### Billing Consumer (`platform/billing/`)
+
+Consumes SQS usage events, aggregates into daily/monthly billing records.
+
+- **Version:** v0.1.0
+- **Image:** `openclaw-saas-billing-consumer:v0.1.0`
+
+### OpenClaw Operator
+
+Manages OpenClawInstance CRDs → StatefulSets with sidecars.
+
+- **Version:** v0.26.2 (Helm chart `openclaw-operator-0.26.2`)
+- **Source:** `oci://ghcr.io/openclaw-rocks/charts/openclaw-operator`
+
+### Agent Pod Architecture
+
+Each agent runs as a StatefulSet with 4 containers:
+
+| Container | Purpose |
+|-----------|---------|
+| `openclaw` | OpenClaw agent (Node.js, 3072MB heap) |
+| `otel-collector` | OTLP → Prometheus metrics on `:9090` |
+| `metrics-exporter` | Scrape otel-collector → SQS usage events |
+| `gateway-proxy` | nginx reverse proxy for gateway |
+
+### LLM Providers
+
+| Provider | Auth | Notes |
+|----------|------|-------|
+| `bedrock-irsa` | Platform-managed (no key needed) | **Global default.** Node role → Bedrock |
+| `bedrock-apikey` | AWS Access Key + Secret | Manual IAM credentials |
+| `openai` | API key | |
+| `anthropic` | API key | |
+| `openai-compatible` | API key + base URL | **CN default.** Any OpenAI-compatible endpoint |
+
+## Branch Workflow
+
+```
+main (Global) → cn (China) → cn-workshop
 ```
 
-### View Logs
+- **main:** Global production (us-west-2). Upstream OpenClaw images.
+- **cn:** China production (cn-northwest-1). Custom images with pre-installed tools.
+- **cn-workshop:** Training/demo. Static manifests + deployment scripts.
 
-```bash
-# Platform API logs
-kubectl logs -n openclaw-platform -l app=platform-api -f
+See `BRANCHES.md` for full diff matrix.
 
-# Specific agent logs
-kubectl logs -n tenant-{name} pod/{agent-name}-0 -c openclaw -f
+Generic fixes: cherry-pick `main → cn`. CN-specific stays on `cn`. Never reverse-merge.
 
-# Metrics exporter logs
-kubectl logs -n tenant-{name} pod/{agent-name}-0 -c metrics-exporter -f
-```
+## Troubleshooting
 
-### Database Access
+| Issue | Cause | Fix |
+|-------|-------|-----|
+| metrics-exporter CrashLoop | Port 9090 conflict with otel-collector | Fixed in v0.3.0 (no Prometheus server) |
+| `No API key for amazon-bedrock` | OpenClaw needs env vars, not IMDS | bedrock-irsa injects temp credentials |
+| CDK deploys to wrong region | CDK CLI ignores `--profile` region | Set `aws_region` in `cdk.json` context |
+| `kubectl: Unauthorized` | CDK cluster needs role assumption | `--role-arn` in `update-kubeconfig` |
+| ECR stack `AlreadyExists` | Repos survive stack deletion | `aws ecr delete-repository --force` |
+| S3 stack `BucketNotEmpty` | Bucket has data | `aws s3 rm --recursive` first |
+| EKS deletion 30+ min | Lambda VPC ENI cleanup | Wait, or manually detach ENIs |
 
-```bash
-# Get DB credentials
-DB_SECRET_ARN=$(aws cloudformation describe-stacks \
-  --stack-name openclaw-saas-dev-rds \
-  --query "Stacks[0].Outputs[?OutputKey=='DbSecretArn'].OutputValue" \
-  --output text)
+## Versioning
 
-aws secretsmanager get-secret-value --secret-id ${DB_SECRET_ARN} \
-  --query SecretString --output text | jq
+| Component | File | Current |
+|-----------|------|---------|
+| Platform API | `platform/VERSION` | 0.9.55 |
+| Metrics Exporter | `platform/metrics-exporter/VERSION` | 0.3.0 |
+| Billing Consumer | `platform/billing/VERSION` | 0.1.0 |
+| Operator | Helm chart | 0.26.2 |
 
-# Port-forward via psql
-kubectl run psql-client --rm -it --image=postgres:16-alpine -- \
-  psql "postgresql://<user>:<pass>@<endpoint>:5432/openclawsaas"
-```
-
-### Monitoring
-
-```bash
-# Check agent metrics
-kubectl port-forward -n tenant-{name} pod/{agent-name}-0 9090:9090
-curl http://localhost:9090/metrics
-
-# SQS queue depth
-aws cloudwatch get-metric-statistics \
-  --namespace AWS/SQS \
-  --metric-name ApproximateNumberOfMessagesVisible \
-  --dimensions Name=QueueName,Value=openclaw-saas-usage-events \
-  --statistics Average \
-  --start-time $(date -u -d '1 hour ago' +%Y-%m-%dT%H:%M:%S) \
-  --end-time $(date -u +%Y-%m-%dT%H:%M:%S) \
-  --period 300
-```
-
-## Documentation
-
-- [Infrastructure README](infra/README.md) - CDK deployment details
-- [Platform README](platform/README.md) - Platform components overview
-- [CRD Conventions](contracts/crd-conventions.md) - Namespace, labels, metrics standards
-- [Access Agent Web UI](platform/docs/access-agent-webui.md) - Port-forward guide for OpenClaw Control UI
-- [Chromium Sidecar](platform/docs/chromium-sidecar.md) - Browser automation sidecar configuration
-- [BRANCHES.md](BRANCHES.md) - Branch workflow and cross-region differences
-- [VERSIONS.md](VERSIONS.md) - Version tracking and image tags
-
-## Multi-Region Deployment
-
-This repository supports multiple AWS regions/partitions via branch strategy:
-
-- **`main`** (this branch) - Global region (us-west-2), account 956045422469
-- **`cn`** - China region (cn-northwest-1), account 735091234506, adapted for China-specific requirements
-- **`cn-workshop`** - China workshop environment with quickstart scripts and pre-built images
-
-See [BRANCHES.md](BRANCHES.md) for detailed differences and development workflow.
-
-## Cost Estimate (us-west-2)
-
-Typical monthly cost for dev/test deployment:
-
-- EKS control plane: ~$73/month
-- EC2 nodes (2× t4g.medium): ~$30/month
-- RDS (db.t4g.micro): ~$13/month
-- NAT Gateway: ~$32/month
-- NLB + S3 + ECR + CloudWatch: ~$20/month
-- **Total: ~$170/month**
-
-For production HA: add Multi-AZ RDS (+$13), extra NAT gateways (+$32/AZ), reserved instances (−30%).
-
-## License
-
-[MIT License](LICENSE)
-
-## Production Endpoint
-
-- **URL**: https://openclaw.chenxqdu.space
-- **CloudFront Distribution**: `E3I6YEIX9MYJFW` (`d1lown43fgvuqx.cloudfront.net`)
-- **ACM Certificate**: `*.chenxqdu.space` (us-east-1, SNI)
-- **Origin**: NLB via HTTP (port 80), restricted to CloudFront prefix list `pl-82a045eb`
-- **Cache**: Disabled (CachingDisabled policy) — all requests forwarded to origin
-- **Admin**: admin@openclaw.ai
-- **GitHub**: chenxqdu/openclaw-saas-gcr (main branch)
-
-**Traffic flow**: Client → CloudFront (HTTPS, TLS 1.2+) → NLB (HTTP, port 80) → platform-api
+Bump the VERSION file → build image → update `.env` tag → `deploy.sh`.
