@@ -64,6 +64,16 @@ class EksStack(cdk.Stack):
         # Store node security group for RDS access
         self.node_security_group = self.cluster.cluster_security_group
 
+        # Allow VPC CIDR → TCP:8000 on the cluster security group.
+        # NLB IP-mode forwards traffic directly to pod IPs on port 8000;
+        # without this rule the EKS cluster SG (self-referencing only by
+        # default) blocks the NLB health-check and data-plane traffic.
+        self.cluster.cluster_security_group.add_ingress_rule(
+            peer=ec2.Peer.ipv4(vpc.vpc_cidr_block),
+            connection=ec2.Port.tcp(8000),
+            description="Allow NLB to reach platform-api pods on port 8000",
+        )
+
         # EBS CSI Driver IRSA — use CfnJson to handle OIDC token resolution
         oidc_provider = self.cluster.open_id_connect_provider
 

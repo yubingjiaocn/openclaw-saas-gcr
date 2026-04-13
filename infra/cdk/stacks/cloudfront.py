@@ -61,6 +61,15 @@ class DnsStack(cdk.Stack):
             description="Allow HTTP from CloudFront managed prefix list",
         )
 
+        # Allow TCP:80 from VPC CIDR for NLB health checks.
+        # NLB IP-mode health checks originate from NLB nodes inside the VPC,
+        # which are NOT covered by the CloudFront prefix list.
+        self.nlb_security_group.add_ingress_rule(
+            peer=ec2.Peer.ipv4(vpc.vpc_cidr_block),
+            connection=ec2.Port.tcp(80),
+            description="Allow NLB health checks from within VPC",
+        )
+
         cdk.CfnOutput(
             self,
             "NlbSecurityGroupId",
