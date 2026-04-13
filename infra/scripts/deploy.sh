@@ -27,6 +27,12 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
+# Load .env file if present
+ENV_FILE="${REPO_ROOT}/.env"
+if [[ -f "${ENV_FILE}" ]]; then
+  set -a; source "${ENV_FILE}"; set +a
+fi
+
 # Default options
 SKIP_CDK=false
 SKIP_K8S=false
@@ -80,6 +86,11 @@ log_error() {
 check_prerequisites() {
   log_info "Checking prerequisites..."
 
+  # Load .env if present
+  if [[ -f "${ENV_FILE}" ]]; then
+    log_info "Loading configuration from ${ENV_FILE}"
+  fi
+
   local missing=()
 
   command -v aws &> /dev/null || missing+=("aws-cli")
@@ -118,8 +129,11 @@ deploy_cdk() {
   PROJECT_NAME=$(jq -r '.context.project_name' cdk.json)
   ENVIRONMENT=$(jq -r '.context.environment' cdk.json)
   STACK_PREFIX="${PROJECT_NAME}-${ENVIRONMENT}"
+  if [[ -z "${ENVIRONMENT}" || "${ENVIRONMENT}" == "null" ]]; then
+    STACK_PREFIX="${PROJECT_NAME}"
+  fi
 
-  log_info "Project: ${PROJECT_NAME}, Environment: ${ENVIRONMENT}"
+  log_info "Project: ${PROJECT_NAME}, Environment: ${ENVIRONMENT:-<none>}, Stack prefix: ${STACK_PREFIX}"
 
   # Bootstrap CDK (if not already done)
   log_info "Bootstrapping CDK..."
@@ -207,11 +221,31 @@ install_openclaw_operator() {
 create_platform_secret() {
   log_info "Creating platform-api-config secret..."
 
+  # Validate required variables
+  local missing=()
+  [[ -z "${ADMIN_EMAIL:-}" ]] && missing+=("ADMIN_EMAIL")
+  [[ -z "${ADMIN_PASSWORD:-}" ]] && missing+=("ADMIN_PASSWORD")
+  [[ -z "${JWT_SECRET:-}" ]] && missing+=("JWT_SECRET")
+  if [[ ${#missing[@]} -gt 0 ]]; then
+    log_error "Required variables not set: ${missing[*]}. Please configure them in .env"
+  fi
+
+  # Auto-populate from CDK outputs
   local db_secret_arn=$(get_stack_output "${STACK_PREFIX}-rds" "DbSecretArn")
   local db_endpoint=$(get_stack_output "${STACK_PREFIX}-rds" "DbEndpoint")
   local db_port=$(get_stack_output "${STACK_PREFIX}-rds" "DbPort")
   local db_name=$(get_stack_output "${STACK_PREFIX}-rds" "DbName")
   local queue_url=$(get_stack_output "${STACK_PREFIX}-sqs" "UsageQueueUrl")
+  local ecr_registry=$(get_stack_output "${STACK_PREFIX}-ecr" "PlatformRepoUriOutput" | cut -d/ -f1)
+
+  # Read metrics-exporter version from VERSION file if not set
+  if [[ -z "${METRICS_EXPORTER_TAG:-}" ]]; then
+    local me_version_file="${REPO_ROOT}/platform/metrics-exporter/VERSION"
+    if [[ -f "${me_version_file}" ]]; then
+      METRICS_EXPORTER_TAG="v$(cat "${me_version_file}" | tr -d '[:space:]')"
+      log_info "Read metrics-exporter version from VERSION file: ${METRICS_EXPORTER_TAG}"
+    fi
+  fi
 
   # Get DB credentials from Secrets Manager
   local db_secret=$(aws secretsmanager get-secret-value --secret-id "${db_secret_arn}" --query SecretString --output text)
@@ -221,11 +255,16 @@ create_platform_secret() {
   # Create database URL
   local database_url="postgresql://${db_username}:${db_password}@${db_endpoint}:${db_port}/${db_name}"
 
-  # Create or update secret
+  # Create or update secret with all configuration
   kubectl create secret generic platform-api-config \
     -n openclaw-platform \
     --from-literal=DATABASE_URL="${database_url}" \
-    --from-literal=USAGE_EVENTS_QUEUE_URL="${queue_url}" \
+    --from-literal=SQS_QUEUE_URL="${queue_url}" \
+    --from-literal=ADMIN_EMAIL="${ADMIN_EMAIL}" \
+    --from-literal=ADMIN_PASSWORD="${ADMIN_PASSWORD}" \
+    --from-literal=JWT_SECRET="${JWT_SECRET}" \
+    --from-literal=ECR_REGISTRY="${ecr_registry:-}" \
+    --from-literal=METRICS_EXPORTER_TAG="${METRICS_EXPORTER_TAG:-latest}" \
     --dry-run=client -o yaml | kubectl apply -f -
 
   log_info "platform-api-config secret created"

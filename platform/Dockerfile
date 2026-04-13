@@ -5,6 +5,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+COPY VERSION .
 COPY api/ ./api/
 COPY billing/ ./billing/
 COPY web-console/dist/ ./web-console/dist/

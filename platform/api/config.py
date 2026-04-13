@@ -43,6 +43,7 @@ class Settings(BaseSettings):
         "735091234506.dkr.ecr.cn-northwest-1.amazonaws.com.cn"
     )
 
+    METRICS_EXPORTER_REPO: str = os.getenv("METRICS_EXPORTER_REPO", "openclaw-saas-dev-metrics-exporter")
     METRICS_EXPORTER_TAG: str = os.getenv("METRICS_EXPORTER_TAG", "latest")
 
     # Available channels for this region (comma-separated)
@@ -64,7 +65,7 @@ class Settings(BaseSettings):
 
     @property
     def metrics_exporter_image(self) -> str:
-        return f"{self.ECR_REGISTRY}/openclaw-saas-dev-metrics-exporter:{self.METRICS_EXPORTER_TAG}"
+        return f"{self.ECR_REGISTRY}/{self.METRICS_EXPORTER_REPO}:{self.METRICS_EXPORTER_TAG}"
 
 
 settings = Settings()

@@ -61,12 +61,16 @@ class Config:
     @property
     def stack_prefix(self) -> str:
         """Get stack name prefix"""
-        return f"{self.project_name}-{self.environment}"
+        if self.environment:
+            return f"{self.project_name}-{self.environment}"
+        return self.project_name
 
     @property
     def resource_prefix(self) -> str:
         """Get resource name prefix"""
-        return f"{self.project_name}-{self.environment}"
+        if self.environment:
+            return f"{self.project_name}-{self.environment}"
+        return self.project_name
 
     @property
     def has_custom_domain(self) -> bool:
@@ -85,8 +89,7 @@ class Config:
 
     def get_tags(self) -> dict:
         """Get common tags for all resources"""
-        return {
-            "Project": self.project_name,
-            "Environment": self.environment,
-            "ManagedBy": "CDK",
-        }
+        tags = {"Project": self.project_name, "ManagedBy": "CDK"}
+        if self.environment:
+            tags["Environment"] = self.environment
+        return tags
