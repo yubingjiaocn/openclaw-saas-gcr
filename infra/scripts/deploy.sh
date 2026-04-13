@@ -299,7 +299,7 @@ create_platform_secret() {
     --from-literal=K8S_IN_CLUSTER="${K8S_IN_CLUSTER:-true}" \
     --from-literal=LOG_LEVEL="${LOG_LEVEL:-INFO}" \
     --from-literal=AWS_REGION="${AWS_REGION}" \
-    --from-literal=AWS_PARTITION="${AWS_PARTITION:-aws-cn}" \
+    --from-literal=AWS_PARTITION="${AWS_PARTITION:-aws}" \
     --from-literal=AWS_ACCOUNT_ID="${AWS_ACCOUNT_ID}" \
     --from-literal=ECR_REGISTRY="${ecr_registry:-}" \
     --from-literal=AVAILABLE_CHANNELS="${AVAILABLE_CHANNELS:-feishu}" \
