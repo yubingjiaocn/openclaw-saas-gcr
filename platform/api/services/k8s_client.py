@@ -353,6 +353,28 @@ class K8sClient:
             "runtime": {"ttlMinutes": 120},
         }
 
+        # Enable diagnostics-otel plugin so OpenClaw exports metrics/traces
+        # to the otel-collector sidecar (managed by operator)
+        raw_config["plugins"]["allow"] = raw_config["plugins"].get("allow", [])
+        if "diagnostics-otel" not in raw_config["plugins"]["allow"]:
+            raw_config["plugins"]["allow"].append("diagnostics-otel")
+        raw_config["plugins"]["entries"]["diagnostics-otel"] = {
+            "enabled": True,
+        }
+        raw_config["diagnostics"] = {
+            "enabled": True,
+            "otel": {
+                "enabled": True,
+                "endpoint": "http://localhost:4318",
+                "protocol": "http/protobuf",
+                "serviceName": f"{tenant_name}-{agent_name}",
+                "traces": False,
+                "metrics": True,
+                "logs": False,
+                "flushIntervalMs": 30000,
+            },
+        }
+
         raw_config["tools"] = {
             "exec": {"security": "full", "ask": "off"},
         }
