@@ -334,6 +334,24 @@ deploy_platform_api() {
   log_info "Platform API deployed"
 }
 
+deploy_billing_consumer() {
+  log_info "Deploying billing consumer..."
+
+  local ecr_registry=$(get_stack_output "${STACK_PREFIX}-ecr" "PlatformRepoUriOutput" | cut -d/ -f1)
+  local billing_repo="${BILLING_CONSUMER_REPO:-openclaw-saas-billing-consumer}"
+  local billing_tag="${BILLING_CONSUMER_TAG:-v0.1.1}"
+  local billing_image="${ecr_registry}/${billing_repo}:${billing_tag}"
+
+  log_info "Using billing image: ${billing_image}"
+
+  export BILLING_IMAGE="${billing_image}"
+  export AWS_REGION="${AWS_REGION}"
+
+  envsubst < "${REPO_ROOT}/k8s-platform/billing-consumer.yaml" | kubectl apply -f -
+
+  log_info "Billing consumer deployed"
+}
+
 run_db_migration() {
   log_info "Running database migration..."
 
@@ -397,6 +415,7 @@ main() {
     install_openclaw_operator
     create_platform_secret
     deploy_platform_api
+    deploy_billing_consumer
     run_db_migration
     verify_deployment
   else
