@@ -591,7 +591,7 @@ function CreateAgentModal({ tenantName, onClose, onSuccess, onError }) {
                   {currentProvider.optional_keys.map(key => (
                     <div className="form-group" key={key} style={{marginBottom:'8px'}}>
                       <label style={{fontSize:'12px'}}>{key} <span style={{color:'var(--text-secondary)'}}>(optional)</span></label>
-                      <input className="form-input" placeholder={key === 'AWS_DEFAULT_REGION' ? 'us-west-2' : key}
+                      <input className="form-input" placeholder={key === 'AWS_DEFAULT_REGION' ? 'e.g. us-west-2 or cn-northwest-1' : key}
                         value={apiKeys[key] || ''} onChange={e => setApiKeys({...apiKeys, [key]: e.target.value})} />
                     </div>
                   ))}

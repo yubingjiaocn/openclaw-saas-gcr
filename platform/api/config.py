@@ -53,6 +53,11 @@ class Settings(BaseSettings):
         return self.ECR_REGISTRY
 
     @property
+    def aws_endpoint_suffix(self) -> str:
+        """Return '.cn' for China partition, '' for Global."""
+        return ".cn" if self.AWS_PARTITION == "aws-cn" else ""
+
+    @property
     def sqs_url(self) -> str:
         return self.SQS_QUEUE_URL
 

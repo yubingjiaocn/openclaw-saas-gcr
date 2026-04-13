@@ -288,6 +288,12 @@ create_platform_secret() {
   # Create database URL
   local database_url="postgresql://${db_username}:${db_password}@${db_endpoint}:${db_port}/${db_name}"
 
+  # Compose full agent image URI: bare repo name gets ECR registry prepended
+  local agent_image="${DEFAULT_AGENT_IMAGE:-}"
+  if [[ -n "${agent_image}" && ! "${agent_image}" == *"."* ]]; then
+    agent_image="${ecr_registry}/${agent_image}"
+  fi
+
   # Create or update secret with all configuration
   kubectl create secret generic platform-api-config \
     -n openclaw-platform \
@@ -303,7 +309,7 @@ create_platform_secret() {
     --from-literal=AWS_ACCOUNT_ID="${AWS_ACCOUNT_ID}" \
     --from-literal=ECR_REGISTRY="${ecr_registry:-}" \
     --from-literal=AVAILABLE_CHANNELS="${AVAILABLE_CHANNELS:-feishu}" \
-    --from-literal=DEFAULT_AGENT_IMAGE="${DEFAULT_AGENT_IMAGE:-}" \
+    --from-literal=DEFAULT_AGENT_IMAGE="${agent_image}" \
     --from-literal=DEFAULT_AGENT_IMAGE_TAG="${DEFAULT_AGENT_IMAGE_TAG}" \
     --from-literal=METRICS_EXPORTER_REPO="${METRICS_EXPORTER_REPO}" \
     --from-literal=METRICS_EXPORTER_TAG="${METRICS_EXPORTER_TAG}" \

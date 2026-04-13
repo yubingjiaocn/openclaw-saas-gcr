@@ -289,8 +289,9 @@ class K8sClient:
         # Bedrock API Key: override region in baseUrl from user-supplied AWS_DEFAULT_REGION
         if llm_provider == "bedrock-apikey" and llm_api_keys:
             region = llm_api_keys.get("AWS_DEFAULT_REGION", settings.AWS_REGION)
+            suffix = settings.aws_endpoint_suffix
             raw_config["models"]["providers"]["amazon-bedrock"]["baseUrl"] = (
-                f"https://bedrock-runtime.{region}.amazonaws.com"
+                f"https://bedrock-runtime.{region}.amazonaws.com{suffix}"
             )
 
         # Browser config: when Chromium sidecar is enabled, configure CDP connection

@@ -1,3 +1,6 @@
 __pycache__/
 *.pyc
 cdk.context.json
+
+# Active env file (contains credentials — use .env.cn or .env.global templates)
+infra/.env

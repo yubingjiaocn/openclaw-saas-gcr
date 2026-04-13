@@ -2,7 +2,9 @@
 # Pre-installs tools that cannot be fetched via npx (China firewall)
 # Base: official OpenClaw image, User: node (uid 1000), HOME: /home/node
 # Target: linux/arm64 (Graviton)
-FROM public.ecr.aws/i4x4j7g8/openclaw-saas/openclaw:2026.3.13-1
+# Build: docker build --build-arg BASE_TAG=2026.3.13-1 ...
+ARG BASE_TAG=2026.3.13-1
+FROM public.ecr.aws/i4x4j7g8/openclaw-saas/openclaw:${BASE_TAG}
 
 USER root
 

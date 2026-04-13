@@ -57,7 +57,7 @@ LLM_PROVIDERS = {
             "models": {
                 "providers": {
                     "amazon-bedrock": {
-                        "baseUrl": f"https://bedrock-runtime.{settings.AWS_REGION}.amazonaws.com",
+                        "baseUrl": f"https://bedrock-runtime.{settings.AWS_REGION}.amazonaws.com{settings.aws_endpoint_suffix}",
                         "auth": "aws-sdk",
                         "api": "bedrock-converse-stream",
                         "models": [
@@ -121,7 +121,7 @@ LLM_PROVIDERS = {
             "models": {
                 "providers": {
                     "amazon-bedrock": {
-                        "baseUrl": f"https://bedrock-runtime.{settings.AWS_REGION}.amazonaws.com",
+                        "baseUrl": f"https://bedrock-runtime.{settings.AWS_REGION}.amazonaws.com{settings.aws_endpoint_suffix}",
                         "auth": "aws-sdk",
                         "api": "bedrock-converse-stream",
                         "models": [

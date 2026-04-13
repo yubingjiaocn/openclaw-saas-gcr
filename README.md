@@ -332,9 +332,9 @@ Generic fixes: cherry-pick `main → cn`. CN-specific stays on `cn`. Never rever
 
 | Component | File | Current |
 |-----------|------|---------|
-| Platform API | `platform/VERSION` | 0.9.52 |
+| Platform API | `platform/VERSION` | 0.9.53 |
 | Metrics Exporter | `platform/metrics-exporter/VERSION` | 0.3.1 |
-| Billing Consumer | `platform/billing/VERSION` | 0.1.0 |
+| Billing Consumer | `platform/billing/VERSION` | 0.1.1 |
 | Operator | Helm chart | 0.26.2 |
 
 Bump the VERSION file → build image → update `.env` tag → `deploy.sh`.
