@@ -132,8 +132,8 @@ class MetricsExporter:
         print(f"Scanning directory: {Config.DATA_DIR}")
         print(f"Scan interval: {Config.SCAN_INTERVAL_SECONDS}s")
 
-        # Start Prometheus metrics server
-        start_metrics_server(Config.METRICS_PORT)
+        # Prometheus metrics server disabled — otel-collector handles :9090
+        # start_metrics_server(Config.METRICS_PORT)
 
         while True:
             try:

@@ -43,8 +43,8 @@ class Settings(BaseSettings):
         "735091234506.dkr.ecr.cn-northwest-1.amazonaws.com.cn"
     )
 
-    METRICS_EXPORTER_REPO: str = os.getenv("METRICS_EXPORTER_REPO", "openclaw-saas-dev-metrics-exporter")
-    METRICS_EXPORTER_TAG: str = os.getenv("METRICS_EXPORTER_TAG", "latest")
+    METRICS_EXPORTER_REPO: str = os.getenv("METRICS_EXPORTER_REPO", "openclaw-saas-metrics-exporter")
+    METRICS_EXPORTER_TAG: str = os.getenv("METRICS_EXPORTER_TAG", "v0.2.0")
 
     # Available channels for this region (comma-separated)
     # China region only supports feishu; global supports all
