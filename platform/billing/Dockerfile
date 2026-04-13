@@ -13,4 +13,4 @@ COPY VERSION .
 COPY *.py .
 
 # Default command (can be overridden)
-CMD ["python", "consumer.py"]
+CMD ["python", "main.py"]

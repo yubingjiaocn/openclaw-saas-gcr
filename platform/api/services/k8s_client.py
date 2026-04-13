@@ -383,6 +383,11 @@ class K8sClient:
                 },
             },
             "spec": {
+                # In CN regions, nodes cannot pull from Docker Hub / ghcr.io.
+                # spec.registry rewrites all image references to use CN ECR.
+                **({
+                    "registry": settings.ECR_REGISTRY,
+                } if settings.AWS_PARTITION == "aws-cn" else {}),
                 **({"image": {
                     "repository": effective_image,
                     "tag": effective_image_tag or "latest",
