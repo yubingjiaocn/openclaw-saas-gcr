@@ -206,23 +206,39 @@ install_alb_controller() {
 install_openclaw_operator() {
   log_info "Installing openclaw-operator..."
 
+  local operator_version="${OPERATOR_VERSION:-0.26.2}"
+  local helm_set_args=(
+    --set leaderElection.enabled=true
+    --set crds.install=true
+  )
+
+  # In CN regions, mirror operator image to ECR for reliability
+  if [[ -n "${OPERATOR_IMAGE_REPO:-}" ]]; then
+    local ecr_registry=$(get_stack_output "${STACK_PREFIX}-ecr" "PlatformRepoUriOutput" | cut -d/ -f1)
+    helm_set_args+=(
+      --set "image.repository=${ecr_registry}/${OPERATOR_IMAGE_REPO}"
+      --set "image.tag=v${operator_version}"
+    )
+    log_info "Using mirrored operator image: ${ecr_registry}/${OPERATOR_IMAGE_REPO}:v${operator_version}"
+  fi
+
   # Check if already installed
   if helm list -n openclaw-operator-system | grep -q openclaw-operator; then
     log_info "openclaw-operator already installed, upgrading..."
     helm upgrade openclaw-operator \
       oci://ghcr.io/openclaw-rocks/charts/openclaw-operator \
       --namespace openclaw-operator-system \
-      --set leaderElection.enabled=true \
-      --set crds.install=true
+      --version "${operator_version}" \
+      "${helm_set_args[@]}"
   else
     helm install openclaw-operator \
       oci://ghcr.io/openclaw-rocks/charts/openclaw-operator \
       --namespace openclaw-operator-system \
-      --set leaderElection.enabled=true \
-      --set crds.install=true
+      --version "${operator_version}" \
+      "${helm_set_args[@]}"
   fi
 
-  log_info "openclaw-operator installed"
+  log_info "openclaw-operator v${operator_version} installed"
 }
 
 create_platform_secret() {

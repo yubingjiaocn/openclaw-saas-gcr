@@ -121,6 +121,9 @@ CN nodes cannot pull from Docker Hub / ghcr.io. All images the operator uses mus
 mirrored into CN ECR **before** deploying any agent. The operator's `spec.registry`
 field rewrites image references automatically.
 
+The **operator itself** also needs to be mirrored — otherwise `helm install/upgrade`
+will timeout waiting for the pod to pull from ghcr.io.
+
 ```bash
 ECR=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com.cn
 
@@ -129,13 +132,13 @@ aws ecr get-login-password --region ${AWS_DEFAULT_REGION} --profile ${AWS_PROFIL
   docker login --username AWS --password-stdin ${ECR}
 
 # Create ECR repos (nested paths supported)
-for repo in openclaw/openclaw nginx astral-sh/uv otel/opentelemetry-collector; do
+for repo in openclaw/openclaw nginx astral-sh/uv otel/opentelemetry-collector openclaw-rocks/openclaw-operator; do
   aws ecr create-repository --repository-name "$repo" \
     --image-scanning-configuration scanOnPush=false \
     --region ${AWS_DEFAULT_REGION} --profile ${AWS_PROFILE} 2>/dev/null || true
 done
 
-# Pull → tag → push
+# --- Agent images (rewritten by spec.registry) ---
 docker pull ghcr.io/openclaw/openclaw:latest
 docker tag  ghcr.io/openclaw/openclaw:latest          ${ECR}/openclaw/openclaw:latest
 docker push ${ECR}/openclaw/openclaw:latest
@@ -151,6 +154,11 @@ docker push ${ECR}/astral-sh/uv:0.6-bookworm-slim
 docker pull otel/opentelemetry-collector:0.120.0
 docker tag  otel/opentelemetry-collector:0.120.0        ${ECR}/otel/opentelemetry-collector:0.120.0
 docker push ${ECR}/otel/opentelemetry-collector:0.120.0
+
+# --- Operator image (used by Helm via OPERATOR_IMAGE_REPO) ---
+docker pull ghcr.io/openclaw-rocks/openclaw-operator:v0.26.2
+docker tag  ghcr.io/openclaw-rocks/openclaw-operator:v0.26.2  ${ECR}/openclaw-rocks/openclaw-operator:v0.26.2
+docker push ${ECR}/openclaw-rocks/openclaw-operator:v0.26.2
 ```
 
 **Registry → ECR path mapping:**
@@ -161,10 +169,12 @@ docker push ${ECR}/otel/opentelemetry-collector:0.120.0
 | `nginx:1.27-alpine` | `${ECR}/nginx:1.27-alpine` |
 | `ghcr.io/astral-sh/uv:0.6-bookworm-slim` | `${ECR}/astral-sh/uv:0.6-bookworm-slim` |
 | `otel/opentelemetry-collector:0.120.0` | `${ECR}/otel/opentelemetry-collector:0.120.0` |
+| `ghcr.io/openclaw-rocks/openclaw-operator:v0.26.2` | `${ECR}/openclaw-rocks/openclaw-operator:v0.26.2` |
 
-> **Note:** The openclaw-operator `spec.registry` field replaces only the registry
-> hostname. Image path and tag remain unchanged. When creating an agent via the
-> platform API, set `registry` in the OpenClawInstance spec.
+> **Note:** Agent images are rewritten by the operator's `spec.registry` field
+> (set automatically by platform API when `AWS_PARTITION=aws-cn`).
+> The operator's own image is overridden via `OPERATOR_IMAGE_REPO` in `.env` →
+> `deploy.sh` passes `--set image.repository` to Helm.
 
 ### 5. Build & Push Platform Images
 
@@ -221,7 +231,8 @@ All deployment configuration is centralized in `infra/.env`:
 | `AVAILABLE_CHANNELS` | | Default: `feishu` |
 | `DEFAULT_AGENT_IMAGE` | | CN custom image |
 | `DEFAULT_AGENT_IMAGE_TAG` | | Default: `latest` |
-| `AGENT_REGISTRY` | | CN ECR hostname for operator `spec.registry` |
+| `OPERATOR_IMAGE_REPO` | | ECR repo path for operator image (CN: `openclaw-rocks/openclaw-operator`) |
+| `OPERATOR_VERSION` | | Operator chart/image version (default: `0.26.2`) |
 
 Auto-populated by `deploy.sh` from CDK outputs: `DATABASE_URL`, `SQS_QUEUE_URL`, `ECR_REGISTRY`.
 
