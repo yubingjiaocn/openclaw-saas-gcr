@@ -270,8 +270,17 @@ create_platform_secret() {
     --from-literal=ADMIN_EMAIL="${ADMIN_EMAIL}" \
     --from-literal=ADMIN_PASSWORD="${ADMIN_PASSWORD}" \
     --from-literal=JWT_SECRET="${JWT_SECRET}" \
+    --from-literal=K8S_IN_CLUSTER="${K8S_IN_CLUSTER:-true}" \
+    --from-literal=LOG_LEVEL="${LOG_LEVEL:-INFO}" \
+    --from-literal=AWS_REGION="${AWS_REGION:-cn-northwest-1}" \
+    --from-literal=AWS_PARTITION="${AWS_PARTITION:-aws-cn}" \
+    --from-literal=AWS_ACCOUNT_ID="${AWS_ACCOUNT_ID:-735091234506}" \
     --from-literal=ECR_REGISTRY="${ecr_registry:-}" \
-    --from-literal=METRICS_EXPORTER_TAG="${METRICS_EXPORTER_TAG:-latest}" \
+    --from-literal=AVAILABLE_CHANNELS="${AVAILABLE_CHANNELS:-feishu}" \
+    --from-literal=DEFAULT_AGENT_IMAGE="${DEFAULT_AGENT_IMAGE:-}" \
+    --from-literal=DEFAULT_AGENT_IMAGE_TAG="${DEFAULT_AGENT_IMAGE_TAG:-latest}" \
+    --from-literal=METRICS_EXPORTER_REPO="${METRICS_EXPORTER_REPO:-openclaw-saas-metrics-exporter}" \
+    --from-literal=METRICS_EXPORTER_TAG="${METRICS_EXPORTER_TAG:-v0.3.0}" \
     --dry-run=client -o yaml | kubectl apply -f -
 
   log_info "platform-api-config secret created"
