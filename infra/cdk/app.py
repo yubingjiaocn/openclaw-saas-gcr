@@ -20,10 +20,12 @@ config = Config(app)
 # Note: CDK CLI sets CDK_DEFAULT_REGION from the default AWS profile, not --profile.
 # For CN deployments, always set AWS_DEFAULT_REGION=cn-northwest-1 in your shell,
 # or set aws_region in cdk.json context.
-_region = os.environ.get("CDK_DEFAULT_REGION", "us-west-2")
+_region = os.environ.get("CDK_DEFAULT_REGION")
 _ctx_region = app.node.try_get_context("aws_region")
 if _ctx_region:
     _region = _ctx_region
+if not _region:
+    raise ValueError("AWS region not set. Set CDK_DEFAULT_REGION env var or aws_region in cdk.json context.")
 
 env = cdk.Environment(
     account=os.environ.get("CDK_DEFAULT_ACCOUNT"),

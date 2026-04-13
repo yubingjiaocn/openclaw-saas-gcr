@@ -146,9 +146,14 @@ deploy_cdk() {
   log_info "Bootstrapping CDK..."
   cdk bootstrap
 
-  # Deploy all stacks
+  # Deploy all stacks (pass environment-specific CDK context from .env)
   log_info "Deploying all CDK stacks..."
-  cdk deploy --all --require-approval never
+  local cdk_context=""
+  [[ -n "${DOMAIN_NAME:-}" ]] && cdk_context+="-c domain_name=${DOMAIN_NAME} "
+  [[ -n "${HOSTED_ZONE_ID:-}" ]] && cdk_context+="-c hosted_zone_id=${HOSTED_ZONE_ID} "
+  [[ -n "${HOSTED_ZONE_NAME:-}" ]] && cdk_context+="-c hosted_zone_name=${HOSTED_ZONE_NAME} "
+  [[ -n "${ACM_CERT_ARN:-}" ]] && cdk_context+="-c acm_cert_arn=${ACM_CERT_ARN} "
+  cdk deploy --all --require-approval never ${cdk_context}
 
   log_info "CDK stacks deployed successfully"
 
@@ -166,7 +171,7 @@ configure_kubectl() {
   fi
 
   log_info "Updating kubeconfig for cluster: ${cluster_name}"
-  aws eks update-kubeconfig --name "${cluster_name}" --region "${AWS_REGION:-cn-northwest-1}"
+  aws eks update-kubeconfig --name "${cluster_name}" --region "${AWS_REGION}"
 
   # Wait for cluster to be ready
   log_info "Waiting for cluster to be ready..."
@@ -186,7 +191,7 @@ install_alb_controller() {
 
   local cluster_name=$(get_stack_output "${STACK_PREFIX}-eks" "ClusterName")
   local vpc_id=$(get_stack_output "${STACK_PREFIX}-vpc" "VpcId")
-  local region="${AWS_REGION:-cn-northwest-1}"
+  local region="${AWS_REGION}"
 
   # Add EKS chart repo
   helm repo add eks https://aws.github.io/eks-charts
@@ -293,9 +298,9 @@ create_platform_secret() {
     --from-literal=JWT_SECRET="${JWT_SECRET}" \
     --from-literal=K8S_IN_CLUSTER="${K8S_IN_CLUSTER:-true}" \
     --from-literal=LOG_LEVEL="${LOG_LEVEL:-INFO}" \
-    --from-literal=AWS_REGION="${AWS_REGION:-cn-northwest-1}" \
+    --from-literal=AWS_REGION="${AWS_REGION}" \
     --from-literal=AWS_PARTITION="${AWS_PARTITION:-aws-cn}" \
-    --from-literal=AWS_ACCOUNT_ID="${AWS_ACCOUNT_ID:-735091234506}" \
+    --from-literal=AWS_ACCOUNT_ID="${AWS_ACCOUNT_ID}" \
     --from-literal=ECR_REGISTRY="${ecr_registry:-}" \
     --from-literal=AVAILABLE_CHANNELS="${AVAILABLE_CHANNELS:-feishu}" \
     --from-literal=DEFAULT_AGENT_IMAGE="${DEFAULT_AGENT_IMAGE:-}" \

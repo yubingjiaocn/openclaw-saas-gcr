@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, JSON, String
 
 from api.database import Base
+from api.config import settings
 
 
 class AgentStatus(str, Enum):
@@ -56,7 +57,7 @@ LLM_PROVIDERS = {
             "models": {
                 "providers": {
                     "amazon-bedrock": {
-                        "baseUrl": "https://bedrock-runtime.us-west-2.amazonaws.com",
+                        "baseUrl": f"https://bedrock-runtime.{settings.AWS_REGION}.amazonaws.com",
                         "auth": "aws-sdk",
                         "api": "bedrock-converse-stream",
                         "models": [
@@ -120,7 +121,7 @@ LLM_PROVIDERS = {
             "models": {
                 "providers": {
                     "amazon-bedrock": {
-                        "baseUrl": "https://bedrock-runtime.us-west-2.amazonaws.com",
+                        "baseUrl": f"https://bedrock-runtime.{settings.AWS_REGION}.amazonaws.com",
                         "auth": "aws-sdk",
                         "api": "bedrock-converse-stream",
                         "models": [

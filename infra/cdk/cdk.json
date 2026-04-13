@@ -6,10 +6,7 @@
     "@aws-cdk/aws-rds:lowercaseDbIdentifier": true,
     "@aws-cdk/aws-lambda:recognizeVersionProps": true,
     "@aws-cdk/aws-cloudfront:defaultSecurityPolicyTLSv1.2_2021": true,
-    "@aws-cdk/core:target-partitions": ["aws-cn"],
 
-    "aws_region": "cn-northwest-1",
-    "aws_account": "735091234506",
     "project_name": "openclaw-saas",
     "environment": "",
 
