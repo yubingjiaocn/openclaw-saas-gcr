@@ -1,4 +1,5 @@
 """Kubernetes client for managing resources"""
+import logging
 import os
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -236,6 +237,22 @@ class K8sClient:
             # Only store actual secrets in K8s Secret (not config values like URLs)
             non_secret_keys = {"CUSTOM_BASE_URL", "CUSTOM_MODEL_ID", "AWS_DEFAULT_REGION"}
             secret_data = {k: v for k, v in llm_api_keys.items() if k not in non_secret_keys}
+
+        # bedrock-irsa: obtain temporary credentials from instance metadata / node role
+        if llm_provider == "bedrock-irsa":
+            import boto3
+            try:
+                session = boto3.Session()
+                credentials = session.get_credentials().get_frozen_credentials()
+                secret_data["AWS_ACCESS_KEY_ID"] = credentials.access_key
+                secret_data["AWS_SECRET_ACCESS_KEY"] = credentials.secret_key
+                if credentials.token:
+                    secret_data["AWS_SESSION_TOKEN"] = credentials.token
+                secret_data["AWS_DEFAULT_REGION"] = "us-west-2"
+                logger.info(f"bedrock-irsa: injected temporary AWS credentials for {agent_name}")
+            except Exception as e:
+                logger.error(f"bedrock-irsa: failed to obtain AWS credentials: {e}")
+                raise ValueError(f"Failed to obtain AWS credentials for bedrock-irsa: {e}")
 
         await self.create_secret(tenant_name, f"{agent_name}-keys", secret_data)
 
