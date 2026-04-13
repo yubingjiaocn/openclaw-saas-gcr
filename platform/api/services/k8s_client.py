@@ -9,6 +9,8 @@ from jinja2 import Environment, FileSystemLoader
 from kubernetes_asyncio import client, config
 from kubernetes_asyncio.client import ApiClient
 
+logger = logging.getLogger(__name__)
+
 from api.config import settings
 
 # Template directory
