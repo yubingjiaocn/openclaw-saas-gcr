@@ -149,7 +149,7 @@ configure_kubectl() {
   fi
 
   log_info "Updating kubeconfig for cluster: ${cluster_name}"
-  aws eks update-kubeconfig --name "${cluster_name}" --region "${AWS_REGION:-us-west-2}"
+  aws eks update-kubeconfig --name "${cluster_name}" --region "${AWS_REGION}"
 
   # Wait for cluster to be ready
   log_info "Waiting for cluster to be ready..."
@@ -169,7 +169,7 @@ install_alb_controller() {
 
   local cluster_name=$(get_stack_output "${STACK_PREFIX}-eks" "ClusterName")
   local vpc_id=$(get_stack_output "${STACK_PREFIX}-vpc" "VpcId")
-  local region="${AWS_REGION:-us-west-2}"
+  local region="${AWS_REGION}"
 
   # Add EKS chart repo
   helm repo add eks https://aws.github.io/eks-charts
@@ -454,7 +454,7 @@ main() {
     source "${REPO_ROOT}/.env"
     set +a
   else
-    log_warn "No .env file found. Using defaults. Copy .env.example to .env for custom config."
+    log_error "No .env file found. Copy .env.global or .env.cn to .env and configure it."
   fi
 
   check_prerequisites

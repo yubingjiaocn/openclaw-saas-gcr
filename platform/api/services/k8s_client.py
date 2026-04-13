@@ -250,7 +250,7 @@ class K8sClient:
                 secret_data["AWS_SECRET_ACCESS_KEY"] = credentials.secret_key
                 if credentials.token:
                     secret_data["AWS_SESSION_TOKEN"] = credentials.token
-                secret_data["AWS_DEFAULT_REGION"] = "us-west-2"
+                secret_data["AWS_DEFAULT_REGION"] = settings.AWS_REGION or "us-west-2"
                 logger.info(f"bedrock-irsa: injected temporary AWS credentials for {agent_name}")
             except Exception as e:
                 logger.error(f"bedrock-irsa: failed to obtain AWS credentials: {e}")
@@ -304,7 +304,7 @@ class K8sClient:
 
         # Bedrock API Key: override region in baseUrl from user-supplied AWS_DEFAULT_REGION
         if llm_provider == "bedrock-apikey" and llm_api_keys:
-            region = llm_api_keys.get("AWS_DEFAULT_REGION", "us-west-2")
+            region = llm_api_keys.get("AWS_DEFAULT_REGION", settings.AWS_REGION or "us-west-2")
             raw_config["models"]["providers"]["amazon-bedrock"]["baseUrl"] = (
                 f"https://bedrock-runtime.{region}.amazonaws.com"
             )

@@ -13,8 +13,8 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = "sqlite+aiosqlite:///./dev.db"
 
-    # JWT Authentication
-    JWT_SECRET: str = "change-me-in-production"
+    # JWT Authentication (REQUIRED — no insecure default)
+    JWT_SECRET: str = os.getenv("JWT_SECRET", "")
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_HOURS: int = 24
 
@@ -28,20 +28,14 @@ class Settings(BaseSettings):
     # Logging
     LOG_LEVEL: str = "INFO"
 
-    # AWS Region settings (parameterized for multi-region support)
-    AWS_REGION: str = os.getenv("AWS_REGION", "us-west-2")
+    # AWS Region settings (REQUIRED — no hardcoded defaults)
+    AWS_REGION: str = os.getenv("AWS_REGION", "")
     AWS_PARTITION: str = os.getenv("AWS_PARTITION", "aws")
     AWS_ACCOUNT_ID: str = os.getenv("AWS_ACCOUNT_ID", "")
 
-    SQS_QUEUE_URL: str = os.getenv(
-        "SQS_QUEUE_URL",
-        "https://us-west-2.queue.amazonaws.com/956045422469/openclaw-saas-usage-events"
-    )
-
-    ECR_REGISTRY: str = os.getenv(
-        "ECR_REGISTRY",
-        "956045422469.dkr.ecr.us-west-2.amazonaws.com"
-    )
+    # SQS and ECR — must be set via env/K8s secret, no fallback
+    SQS_QUEUE_URL: str = os.getenv("SQS_QUEUE_URL", "")
+    ECR_REGISTRY: str = os.getenv("ECR_REGISTRY", "")
 
     METRICS_EXPORTER_REPO: str = os.getenv("METRICS_EXPORTER_REPO", "openclaw-saas-metrics-exporter")
     METRICS_EXPORTER_TAG: str = os.getenv("METRICS_EXPORTER_TAG", "v0.3.2")
