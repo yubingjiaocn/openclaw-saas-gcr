@@ -44,8 +44,12 @@ async def init_db():
     # Import models so they register with Base.metadata
     from api.models import user, tenant, agent  # noqa: F401
 
+    # Billing models use a separate Base — import it to create usage tables
+    from billing.models import Base as BillingBase  # noqa: F401
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(BillingBase.metadata.create_all)
 
 
 async def seed_admin():

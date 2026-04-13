@@ -48,7 +48,13 @@ class ApiClient {
       throw new Error('Unauthorized')
     }
     if (res.status === 204) return null
-    const data = await res.json()
+    let data
+    try {
+      data = await res.json()
+    } catch {
+      if (!res.ok) throw new Error(`Server error (${res.status})`)
+      throw new Error('Invalid response from server')
+    }
     if (!res.ok) {
       let msg = 'Request failed'
       if (typeof data.detail === 'string') {
