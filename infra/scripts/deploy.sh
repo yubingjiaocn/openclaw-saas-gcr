@@ -263,8 +263,8 @@ create_platform_secret() {
     --from-literal=AVAILABLE_CHANNELS="${AVAILABLE_CHANNELS:-}" \
     --from-literal=DEFAULT_AGENT_IMAGE="${DEFAULT_AGENT_IMAGE:-}" \
     --from-literal=DEFAULT_AGENT_IMAGE_TAG="${DEFAULT_AGENT_IMAGE_TAG:-latest}" \
-    --from-literal=METRICS_EXPORTER_REPO="${METRICS_EXPORTER_REPO:-openclaw-metrics-exporter}" \
-    --from-literal=METRICS_EXPORTER_TAG="${METRICS_EXPORTER_TAG:-v0.1.0}" \
+    --from-literal=METRICS_EXPORTER_REPO="${METRICS_EXPORTER_REPO:-openclaw-saas-metrics-exporter}" \
+    --from-literal=METRICS_EXPORTER_TAG="${METRICS_EXPORTER_TAG:-v0.3.0}" \
     --dry-run=client -o yaml | kubectl apply -f -
 
   log_info "platform-api-config secret created"
