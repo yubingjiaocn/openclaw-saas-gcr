@@ -54,12 +54,17 @@ class IamStack(cdk.Stack):
             description="IRSA role for OpenClaw platform API",
         )
 
-        # SQS permissions for usage events
+        # SQS permissions for usage events (send from metrics-exporter,
+        # receive/delete from billing-consumer)
         self.platform_api_role.add_to_policy(
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
                 actions=[
                     "sqs:SendMessage",
+                    "sqs:SendMessageBatch",
+                    "sqs:ReceiveMessage",
+                    "sqs:DeleteMessage",
+                    "sqs:DeleteMessageBatch",
                     "sqs:GetQueueUrl",
                     "sqs:GetQueueAttributes",
                 ],
@@ -109,6 +114,9 @@ class IamStack(cdk.Stack):
                     actions=[
                         "sqs:SendMessage",
                         "sqs:SendMessageBatch",
+                        "sqs:ReceiveMessage",
+                        "sqs:DeleteMessage",
+                        "sqs:DeleteMessageBatch",
                         "sqs:GetQueueUrl",
                         "sqs:GetQueueAttributes",
                     ],
