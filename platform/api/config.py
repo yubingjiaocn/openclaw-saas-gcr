@@ -43,7 +43,7 @@ class Settings(BaseSettings):
         "956045422469.dkr.ecr.us-west-2.amazonaws.com"
     )
 
-    METRICS_EXPORTER_REPO: str = os.getenv("METRICS_EXPORTER_REPO", "openclaw-metrics-exporter")
+    METRICS_EXPORTER_REPO: str = os.getenv("METRICS_EXPORTER_REPO", "openclaw-saas-metrics-exporter")
     METRICS_EXPORTER_TAG: str = os.getenv("METRICS_EXPORTER_TAG", "v0.1.0")
 
     # Available channels for this region (comma-separated, empty = all)
