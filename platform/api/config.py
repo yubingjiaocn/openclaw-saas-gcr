@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     )
 
     METRICS_EXPORTER_REPO: str = os.getenv("METRICS_EXPORTER_REPO", "openclaw-saas-metrics-exporter")
-    METRICS_EXPORTER_TAG: str = os.getenv("METRICS_EXPORTER_TAG", "v0.1.0")
+    METRICS_EXPORTER_TAG: str = os.getenv("METRICS_EXPORTER_TAG", "v0.2.0")
 
     # Available channels for this region (comma-separated, empty = all)
     AVAILABLE_CHANNELS: str = os.getenv("AVAILABLE_CHANNELS", "")
