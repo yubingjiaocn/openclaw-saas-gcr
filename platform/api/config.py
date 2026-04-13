@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     )
 
     METRICS_EXPORTER_REPO: str = os.getenv("METRICS_EXPORTER_REPO", "openclaw-saas-metrics-exporter")
-    METRICS_EXPORTER_TAG: str = os.getenv("METRICS_EXPORTER_TAG", "v0.3.0")
+    METRICS_EXPORTER_TAG: str = os.getenv("METRICS_EXPORTER_TAG", "v0.3.1")
 
     # Available channels for this region (comma-separated)
     # China region only supports feishu; global supports all

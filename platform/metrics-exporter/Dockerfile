@@ -5,4 +5,5 @@ RUN pip install --no-cache-dir boto3
 
 COPY *.py .
 
+ENV PYTHONUNBUFFERED=1
 CMD ["python", "exporter.py"]
