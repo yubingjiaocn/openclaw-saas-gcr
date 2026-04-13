@@ -11,10 +11,10 @@
     "project_name": "openclaw-saas",
     "environment": "",
 
-    "domain_name": "",
-    "hosted_zone_id": "",
-    "hosted_zone_name": "",
-    "acm_cert_arn": "",
+    "domain_name": "openclaw.chenxqdu.space",
+    "hosted_zone_id": "Z05548213K9QNDQQ0ITHP",
+    "hosted_zone_name": "chenxqdu.space",
+    "acm_cert_arn": "arn:aws:acm:us-east-1:956045422469:certificate/0cb9149c-f98a-4d56-814c-27ad7a4937c7",
 
     "db_instance_class": "t4g.micro",
     "db_name": "openclawsaas",

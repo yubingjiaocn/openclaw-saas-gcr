@@ -65,15 +65,17 @@ s3_stack = S3Stack(
     description="OpenClaw SaaS S3 buckets for backups",
 )
 
-# DNS/ACM Stack (optional, only if domain configured)
+# DNS/CloudFront Stack (optional, only if domain configured)
 if config.has_custom_domain:
     dns_stack = DnsStack(
         app,
         f"{config.stack_prefix}-dns",
         config=config,
+        vpc=vpc_stack.vpc,
         env=env,
-        description="OpenClaw SaaS DNS and ACM certificate",
+        description="OpenClaw SaaS CloudFront, DNS, and NLB security group",
     )
+    dns_stack.add_dependency(vpc_stack)
 
 # ========== EKS and Related ==========
 

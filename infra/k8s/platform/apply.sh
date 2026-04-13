@@ -5,15 +5,17 @@ set -euo pipefail
 # Usage: ./apply.sh
 #
 # Required environment variables:
-#   PLATFORM_IMAGE    - Platform API container image
+#   PLATFORM_IMAGE          - Platform API container image
 #
-# Optional environment variables (for ALB + custom domain mode):
-#   ACM_CERT_ARN      - ACM certificate ARN for ALB ingress
-#   DOMAIN_NAME       - Custom domain name for ingress
+# Optional environment variables:
+#   NLB_SECURITY_GROUP_ID   - CDK-managed SG for NLB (CloudFront prefix list)
+#   ACM_CERT_ARN            - ACM certificate ARN for ALB ingress
+#   DOMAIN_NAME             - Custom domain name for ingress
 #
 # Modes:
 #   NLB mode (default):  Only PLATFORM_IMAGE required. Creates an internet-facing
 #                         NLB with CloudFront prefix list restriction.
+#                         Set NLB_SECURITY_GROUP_ID to use CDK-managed security group.
 #   ALB mode:            Set ACM_CERT_ARN and DOMAIN_NAME to also deploy ALB Ingress
 #                         with HTTPS and custom domain.
 

@@ -302,6 +302,13 @@ deploy_platform_api() {
   local acm_cert_arn=$(get_stack_output "${STACK_PREFIX}-dns" "CertificateArn" || echo "")
   local domain_name=$(get_stack_output "${STACK_PREFIX}-dns" "DomainName" || echo "")
 
+  # Get NLB Security Group ID from CDK (CloudFront prefix list restricted)
+  local nlb_sg_id=$(get_stack_output "${STACK_PREFIX}-dns" "NlbSecurityGroupId" || echo "")
+  if [[ -n "${nlb_sg_id}" ]]; then
+    export NLB_SECURITY_GROUP_ID="${nlb_sg_id}"
+    log_info "Using CDK-managed NLB Security Group: ${nlb_sg_id}"
+  fi
+
   # Apply K8s manifests with substitution
   # NLB mode (default): only PLATFORM_IMAGE is required
   # ALB mode: set ACM_CERT_ARN and DOMAIN_NAME for ALB ingress with HTTPS
@@ -315,6 +322,61 @@ deploy_platform_api() {
   bash apply.sh
 
   log_info "Platform API deployed"
+}
+
+update_cloudfront_origin() {
+  log_info "Updating CloudFront Distribution origin with NLB DNS..."
+
+  local cf_dist_id=$(get_stack_output "${STACK_PREFIX}-dns" "CloudFrontDistributionId" || echo "")
+  if [[ -z "${cf_dist_id}" ]]; then
+    log_warn "No CloudFront Distribution ID found, skipping origin update"
+    return
+  fi
+
+  # Wait for NLB DNS
+  local nlb_dns=""
+  for i in $(seq 1 36); do
+    nlb_dns=$(kubectl get svc platform-api -n openclaw-platform \
+      -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
+    if [[ -n "${nlb_dns}" ]]; then
+      break
+    fi
+    echo "    Waiting for NLB DNS... (${i}/36)"
+    sleep 5
+  done
+
+  if [[ -z "${nlb_dns}" ]]; then
+    log_warn "NLB DNS not available after 3 minutes. Update CloudFront origin manually."
+    return
+  fi
+
+  log_info "NLB DNS: ${nlb_dns}"
+
+  # Get current CloudFront config
+  local etag
+  etag=$(aws cloudfront get-distribution-config --id "${cf_dist_id}" \
+    --query 'ETag' --output text)
+
+  local config_json
+  config_json=$(aws cloudfront get-distribution-config --id "${cf_dist_id}" \
+    --query 'DistributionConfig' --output json)
+
+  # Update origin domain name from placeholder to actual NLB DNS
+  local updated_config
+  updated_config=$(echo "${config_json}" | jq --arg nlb "${nlb_dns}" '
+    .Origins.Items[0].DomainName = $nlb
+    | .Origins.Items[0].Id as $old_id
+    | .Origins.Items[0].Id = $nlb
+    | .DefaultCacheBehavior.TargetOriginId = $nlb
+  ')
+
+  # Apply the update
+  aws cloudfront update-distribution \
+    --id "${cf_dist_id}" \
+    --if-match "${etag}" \
+    --distribution-config "${updated_config}" > /dev/null
+
+  log_info "CloudFront Distribution ${cf_dist_id} origin updated to ${nlb_dns}"
 }
 
 run_db_migration() {
@@ -395,6 +457,7 @@ main() {
     install_openclaw_operator
     create_platform_secret
     deploy_platform_api
+    update_cloudfront_origin
     run_db_migration
     verify_deployment
   else

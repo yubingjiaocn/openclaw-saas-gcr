@@ -10,8 +10,8 @@ metadata:
     service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
     service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
     service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: "ip"
-    # Security: restrict to CloudFront prefix list only
-    service.beta.kubernetes.io/aws-load-balancer-security-groups: "sg-00cd46f97f5b706aa"
+    # Security: restrict to CloudFront prefix list via CDK-managed SG
+    service.beta.kubernetes.io/aws-load-balancer-security-groups: "${NLB_SECURITY_GROUP_ID}"
     # Health check
     service.beta.kubernetes.io/aws-load-balancer-healthcheck-path: "/health"
     service.beta.kubernetes.io/aws-load-balancer-healthcheck-protocol: "HTTP"
