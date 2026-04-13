@@ -1,4 +1,4 @@
-"""IAM stack for OpenClaw SaaS (China region)"""
+"""IAM stack for OpenClaw SaaS"""
 import aws_cdk as cdk
 from aws_cdk import aws_iam as iam
 from aws_cdk import aws_eks as eks
@@ -87,6 +87,16 @@ class IamStack(cdk.Stack):
         # NOTE: Bedrock is NOT available in AWS China regions.
         # No node Bedrock policy needed. Tenants must use external LLM providers
         # (OpenAI, Anthropic) with their own API keys.
+
+        # ——— Node Role: AWS Load Balancer Controller ———
+        # ALB Controller runs on nodes (not IRSA) and needs ELB permissions
+        # to create/manage NLBs for LoadBalancer-type Services.
+        if node_role is not None:
+            node_role.add_managed_policy(
+                iam.ManagedPolicy.from_aws_managed_policy_name(
+                    "ElasticLoadBalancingFullAccess"
+                )
+            )
 
         # ——— Node Role SQS permissions ———
         # OpenClaw agent pods run on nodes (not via IRSA), so the node instance
