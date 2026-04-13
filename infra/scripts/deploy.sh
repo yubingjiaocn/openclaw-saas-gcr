@@ -249,6 +249,9 @@ install_openclaw_operator() {
 create_platform_secret() {
   log_info "Creating platform-api-config secret..."
 
+  # Ensure namespace exists (needed on first deploy before platform manifests)
+  kubectl create ns openclaw-platform --dry-run=client -o yaml | kubectl apply -f - 2>/dev/null
+
   # Validate required variables
   local missing=()
   [[ -z "${ADMIN_EMAIL:-}" ]] && missing+=("ADMIN_EMAIL")

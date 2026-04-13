@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     ECR_REGISTRY: str = os.getenv("ECR_REGISTRY", "")
 
     METRICS_EXPORTER_REPO: str = os.getenv("METRICS_EXPORTER_REPO", "openclaw-saas-metrics-exporter")
-    METRICS_EXPORTER_TAG: str = os.getenv("METRICS_EXPORTER_TAG", "v0.3.2")
+    METRICS_EXPORTER_TAG: str = os.getenv("METRICS_EXPORTER_TAG", "v0.3.1")
 
     # Available channels for this region (comma-separated, empty = all)
     AVAILABLE_CHANNELS: str = os.getenv("AVAILABLE_CHANNELS", "")

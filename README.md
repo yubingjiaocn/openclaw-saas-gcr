@@ -207,7 +207,7 @@ cd infra
 kubectl get pods -n openclaw-platform
 kubectl port-forward -n openclaw-platform svc/platform-api 8000:80
 curl http://localhost:8000/health
-# {"status":"ok","version":"0.9.52"}
+# {"status":"ok","version":"0.9.53"}
 ```
 
 ## Configuration
@@ -319,6 +319,7 @@ cdk destroy openclaw-saas-vpc --force
 | EKS deletion 30+ min | Lambda VPC ENI cleanup | Wait, or manually detach ENIs |
 | metrics-exporter CrashLoop | Port 9090 conflict with otel-collector | Fixed in v0.3.0+ (no Prometheus server) |
 | No usage metrics | OpenClaw not sending OTEL data | Fixed in v0.9.52 (diagnostics-otel plugin) |
+| Helm operator install timeout | ghcr.io chart pull slow in CN | Retry; chart is ~50KB so usually succeeds. Operator **image** is mirrored via `OPERATOR_IMAGE_REPO` |
 
 ## Branch Workflow
 
