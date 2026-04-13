@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     # Logging
     LOG_LEVEL: str = "INFO"
 
-    # AWS China Region settings
+    # AWS China Region settings (defaults for CN, override via env vars)
     AWS_REGION: str = os.getenv("AWS_REGION", "cn-northwest-1")
     AWS_PARTITION: str = os.getenv("AWS_PARTITION", "aws-cn")
     AWS_ACCOUNT_ID: str = os.getenv("AWS_ACCOUNT_ID", "735091234506")

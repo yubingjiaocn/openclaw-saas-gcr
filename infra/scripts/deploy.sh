@@ -233,6 +233,11 @@ create_platform_secret() {
   [[ -z "${ADMIN_EMAIL:-}" ]] && missing+=("ADMIN_EMAIL")
   [[ -z "${ADMIN_PASSWORD:-}" ]] && missing+=("ADMIN_PASSWORD")
   [[ -z "${JWT_SECRET:-}" ]] && missing+=("JWT_SECRET")
+  [[ -z "${AWS_REGION:-}" ]] && missing+=("AWS_REGION")
+  [[ -z "${AWS_PARTITION:-}" ]] && missing+=("AWS_PARTITION")
+  [[ -z "${AWS_ACCOUNT_ID:-}" ]] && missing+=("AWS_ACCOUNT_ID")
+  [[ -z "${METRICS_EXPORTER_REPO:-}" ]] && missing+=("METRICS_EXPORTER_REPO")
+  [[ -z "${METRICS_EXPORTER_TAG:-}" ]] && missing+=("METRICS_EXPORTER_TAG")
   if [[ ${#missing[@]} -gt 0 ]]; then
     log_error "Required variables not set: ${missing[*]}. Please configure them in .env"
   fi
@@ -278,9 +283,9 @@ create_platform_secret() {
     --from-literal=ECR_REGISTRY="${ecr_registry:-}" \
     --from-literal=AVAILABLE_CHANNELS="${AVAILABLE_CHANNELS:-feishu}" \
     --from-literal=DEFAULT_AGENT_IMAGE="${DEFAULT_AGENT_IMAGE:-}" \
-    --from-literal=DEFAULT_AGENT_IMAGE_TAG="${DEFAULT_AGENT_IMAGE_TAG:-latest}" \
-    --from-literal=METRICS_EXPORTER_REPO="${METRICS_EXPORTER_REPO:-openclaw-saas-metrics-exporter}" \
-    --from-literal=METRICS_EXPORTER_TAG="${METRICS_EXPORTER_TAG:-v0.3.0}" \
+    --from-literal=DEFAULT_AGENT_IMAGE_TAG="${DEFAULT_AGENT_IMAGE_TAG}" \
+    --from-literal=METRICS_EXPORTER_REPO="${METRICS_EXPORTER_REPO}" \
+    --from-literal=METRICS_EXPORTER_TAG="${METRICS_EXPORTER_TAG}" \
     --dry-run=client -o yaml | kubectl apply -f -
 
   log_info "platform-api-config secret created"
