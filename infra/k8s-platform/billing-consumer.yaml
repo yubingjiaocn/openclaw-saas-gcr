@@ -17,12 +17,12 @@ spec:
     spec:
       containers:
         - name: consumer
-          image: 956045422469.dkr.ecr.us-west-2.amazonaws.com/openclaw-saas-billing-consumer:v0.1.1
+          image: ${BILLING_IMAGE}
           env:
             - name: PYTHONUNBUFFERED
               value: "1"
             - name: AWS_DEFAULT_REGION
-              value: "us-west-2"
+              value: "${AWS_REGION}"
           envFrom:
             - secretRef:
                 name: platform-api-config
