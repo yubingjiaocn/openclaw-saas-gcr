@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     # AWS Region settings (parameterized for multi-region support)
     AWS_REGION: str = os.getenv("AWS_REGION", "us-west-2")
     AWS_PARTITION: str = os.getenv("AWS_PARTITION", "aws")
-    AWS_ACCOUNT_ID: str = os.getenv("AWS_ACCOUNT_ID", "956045422469")
+    AWS_ACCOUNT_ID: str = os.getenv("AWS_ACCOUNT_ID", "")
 
     SQS_QUEUE_URL: str = os.getenv(
         "SQS_QUEUE_URL",

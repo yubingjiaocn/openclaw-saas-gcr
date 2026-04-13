@@ -216,6 +216,11 @@ create_platform_secret() {
   [[ -z "${ADMIN_EMAIL:-}" ]] && missing+=("ADMIN_EMAIL")
   [[ -z "${ADMIN_PASSWORD:-}" ]] && missing+=("ADMIN_PASSWORD")
   [[ -z "${JWT_SECRET:-}" ]] && missing+=("JWT_SECRET")
+  [[ -z "${AWS_REGION:-}" ]] && missing+=("AWS_REGION")
+  [[ -z "${AWS_PARTITION:-}" ]] && missing+=("AWS_PARTITION")
+  [[ -z "${AWS_ACCOUNT_ID:-}" ]] && missing+=("AWS_ACCOUNT_ID")
+  [[ -z "${METRICS_EXPORTER_REPO:-}" ]] && missing+=("METRICS_EXPORTER_REPO")
+  [[ -z "${METRICS_EXPORTER_TAG:-}" ]] && missing+=("METRICS_EXPORTER_TAG")
   if [[ ${#missing[@]} -gt 0 ]]; then
     log_error "Required variables not set: ${missing[*]}. Please configure them in .env"
   fi
@@ -255,16 +260,16 @@ create_platform_secret() {
     --from-literal=ADMIN_EMAIL="${ADMIN_EMAIL}" \
     --from-literal=ADMIN_PASSWORD="${ADMIN_PASSWORD}" \
     --from-literal=JWT_SECRET="${JWT_SECRET}" \
-    --from-literal=K8S_IN_CLUSTER="${K8S_IN_CLUSTER:-true}" \
-    --from-literal=LOG_LEVEL="${LOG_LEVEL:-INFO}" \
-    --from-literal=AWS_REGION="${AWS_REGION:-us-west-2}" \
-    --from-literal=AWS_PARTITION="${AWS_PARTITION:-aws}" \
-    --from-literal=AWS_ACCOUNT_ID="${AWS_ACCOUNT_ID:-956045422469}" \
+    --from-literal=K8S_IN_CLUSTER="${K8S_IN_CLUSTER}" \
+    --from-literal=LOG_LEVEL="${LOG_LEVEL}" \
+    --from-literal=AWS_REGION="${AWS_REGION}" \
+    --from-literal=AWS_PARTITION="${AWS_PARTITION}" \
+    --from-literal=AWS_ACCOUNT_ID="${AWS_ACCOUNT_ID}" \
     --from-literal=AVAILABLE_CHANNELS="${AVAILABLE_CHANNELS:-}" \
     --from-literal=DEFAULT_AGENT_IMAGE="${DEFAULT_AGENT_IMAGE:-}" \
-    --from-literal=DEFAULT_AGENT_IMAGE_TAG="${DEFAULT_AGENT_IMAGE_TAG:-latest}" \
-    --from-literal=METRICS_EXPORTER_REPO="${METRICS_EXPORTER_REPO:-openclaw-saas-metrics-exporter}" \
-    --from-literal=METRICS_EXPORTER_TAG="${METRICS_EXPORTER_TAG:-v0.3.0}" \
+    --from-literal=DEFAULT_AGENT_IMAGE_TAG="${DEFAULT_AGENT_IMAGE_TAG}" \
+    --from-literal=METRICS_EXPORTER_REPO="${METRICS_EXPORTER_REPO}" \
+    --from-literal=METRICS_EXPORTER_TAG="${METRICS_EXPORTER_TAG}" \
     --dry-run=client -o yaml | kubectl apply -f -
 
   log_info "platform-api-config secret created"
