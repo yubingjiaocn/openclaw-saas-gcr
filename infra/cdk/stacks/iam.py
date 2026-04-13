@@ -54,12 +54,17 @@ class IamStack(cdk.Stack):
             description="IRSA role for OpenClaw platform API",
         )
 
-        # SQS permissions for usage events
+        # SQS permissions for usage events (send from metrics-exporter,
+        # receive/delete from billing-consumer)
         self.platform_api_role.add_to_policy(
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
                 actions=[
                     "sqs:SendMessage",
+                    "sqs:SendMessageBatch",
+                    "sqs:ReceiveMessage",
+                    "sqs:DeleteMessage",
+                    "sqs:DeleteMessageBatch",
                     "sqs:GetQueueUrl",
                     "sqs:GetQueueAttributes",
                 ],
@@ -84,24 +89,9 @@ class IamStack(cdk.Stack):
             )
         )
 
-        # Bedrock InvokeModel permissions for agent pods (via node role)
-        # Only applies to Global (main) — CN regions don't have Bedrock
-        if partition == "aws":
-            if node_role is not None:
-                node_role.add_to_principal_policy(
-                    iam.PolicyStatement(
-                        effect=iam.Effect.ALLOW,
-                        actions=[
-                            "bedrock:InvokeModel",
-                            "bedrock:InvokeModelWithResponseStream",
-                        ],
-                        resources=[
-                            f"arn:aws:bedrock:*:{self.account}:foundation-model/*",
-                            f"arn:aws:bedrock:*:{self.account}:inference-profile/*",
-                            "arn:aws:bedrock:*::foundation-model/*",
-                        ],
-                    )
-                )
+        # NOTE: Bedrock is NOT available in AWS China regions.
+        # No node Bedrock policy needed. Tenants must use external LLM providers
+        # (OpenAI, Anthropic) with their own API keys.
 
         # ——— Node Role: AWS Load Balancer Controller ———
         # ALB Controller runs on nodes (not IRSA) and needs ELB permissions
@@ -124,6 +114,9 @@ class IamStack(cdk.Stack):
                     actions=[
                         "sqs:SendMessage",
                         "sqs:SendMessageBatch",
+                        "sqs:ReceiveMessage",
+                        "sqs:DeleteMessage",
+                        "sqs:DeleteMessageBatch",
                         "sqs:GetQueueUrl",
                         "sqs:GetQueueAttributes",
                     ],
