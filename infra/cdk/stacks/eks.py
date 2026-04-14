@@ -38,6 +38,8 @@ class EksStack(cdk.Stack):
         k8s_version = k8s_version_map.get(config.eks_version, eks.KubernetesVersion.V1_30)
 
         # Create EKS cluster
+        # API_AND_CONFIG_MAP allows granting access via both aws-auth ConfigMap
+        # and `aws eks create-access-entry` (IAM API).
         self.cluster = eks.Cluster(
             self,
             "OpenClawCluster",
@@ -48,6 +50,7 @@ class EksStack(cdk.Stack):
             vpc_subnets=[ec2.SubnetSelection(subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS)],
             default_capacity=0,
             endpoint_access=eks.EndpointAccess.PUBLIC_AND_PRIVATE,
+            authentication_mode=eks.AuthenticationMode.API_AND_CONFIG_MAP,
         )
 
         # Add Graviton managed node group (ARM64) with configurable params
