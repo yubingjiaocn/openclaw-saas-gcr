@@ -17,6 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends jq \
 RUN cd /app/extensions/acpx \
     && PINNED=$(node -e "console.log(JSON.parse(require('fs').readFileSync('package.json','utf8')).dependencies.acpx)") \
     && echo "Installing acpx@${PINNED}" \
+    && node -e "const p=JSON.parse(require('fs').readFileSync('package.json','utf8')); delete p.devDependencies; require('fs').writeFileSync('package.json',JSON.stringify(p,null,2))" \
     && npm install --omit=dev --no-save "acpx@${PINNED}" 2>&1 \
     && /app/extensions/acpx/node_modules/.bin/acpx --version
 
