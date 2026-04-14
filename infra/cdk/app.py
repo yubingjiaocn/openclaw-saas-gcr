@@ -17,18 +17,32 @@ app = cdk.App()
 config = Config(app)
 
 # Get AWS account and region from environment or context
-# Note: CDK CLI sets CDK_DEFAULT_REGION from the default AWS profile, not --profile.
-# For CN deployments, always set AWS_DEFAULT_REGION=cn-northwest-1 in your shell,
-# or set aws_region in cdk.json context.
-_region = os.environ.get("CDK_DEFAULT_REGION")
-_ctx_region = app.node.try_get_context("aws_region")
-if _ctx_region:
-    _region = _ctx_region
+# Priority: AWS_REGION / AWS_ACCOUNT_ID (.env) → CDK_DEFAULT_* (AWS profile) → cdk.json context
+_region = (
+    os.environ.get("AWS_REGION")
+    or os.environ.get("CDK_DEFAULT_REGION")
+    or app.node.try_get_context("aws_region")
+)
 if not _region:
-    raise ValueError("AWS region not set. Set CDK_DEFAULT_REGION env var or aws_region in cdk.json context.")
+    raise ValueError(
+        "AWS region not set. Set AWS_REGION in .env, CDK_DEFAULT_REGION, or aws_region in cdk.json."
+    )
+
+_account = (
+    os.environ.get("AWS_ACCOUNT_ID")
+    or os.environ.get("CDK_DEFAULT_ACCOUNT")
+)
+if not _account:
+    raise ValueError(
+        "AWS account not set. Set AWS_ACCOUNT_ID in .env or CDK_DEFAULT_ACCOUNT."
+    )
+
+# Auto-infer target partition from region (aws-cn for China, aws otherwise)
+_partition = "aws-cn" if _region.startswith("cn-") else "aws"
+app.node.set_context("@aws-cdk/core:target-partitions", [_partition])
 
 env = cdk.Environment(
-    account=os.environ.get("CDK_DEFAULT_ACCOUNT"),
+    account=_account,
     region=_region,
 )
 

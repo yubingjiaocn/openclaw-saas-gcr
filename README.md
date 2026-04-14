@@ -74,7 +74,7 @@ All deployment config lives in `.env`. No hardcoded values elsewhere.
 
 ### 2. Deploy Infrastructure (CDK)
 
-> **⚠️ Critical:** Always set `AWS_DEFAULT_REGION` explicitly. CDK CLI uses the default AWS profile's region, not `--profile`'s region. The `aws_region` context in `cdk.json` is the reliable override.
+> **⚠️ Critical:** CDK reads `AWS_REGION` from `.env` (loaded by `deploy.sh`) → `CDK_DEFAULT_REGION` → `aws_region` in `cdk.json`. Ensure one of these is set.
 
 ```bash
 export AWS_PROFILE=cn
@@ -240,7 +240,7 @@ Auto-populated by `deploy.sh` from CDK outputs: `DATABASE_URL`, `SQS_QUEUE_URL`,
 
 Instance types, cluster size, domain — all in `cdk/cdk.json` context.
 
-**CN-specific:** `aws_region: cn-northwest-1`, `"@aws-cdk/core:target-partitions": ["aws-cn"]`
+**CN-specific:** `target-partitions` is auto-inferred from the region (no manual setting needed).
 
 ## Components
 
