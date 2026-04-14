@@ -209,7 +209,10 @@ install_alb_controller() {
   if [[ -n "${ALB_CONTROLLER_IMAGE:-}" ]]; then
     local ecr_registry=$(get_stack_output "${STACK_PREFIX}-ecr" "PlatformRepoUriOutput" | cut -d/ -f1)
     helm_args+=(--set "image.repository=${ecr_registry}/${ALB_CONTROLLER_IMAGE}")
-    log_info "Using mirrored ALB controller image: ${ecr_registry}/${ALB_CONTROLLER_IMAGE}"
+    if [[ -n "${ALB_CONTROLLER_TAG:-}" ]]; then
+      helm_args+=(--set "image.tag=${ALB_CONTROLLER_TAG}")
+    fi
+    log_info "Using mirrored ALB controller image: ${ecr_registry}/${ALB_CONTROLLER_IMAGE}:${ALB_CONTROLLER_TAG:-latest}"
   fi
 
   # Install ALB controller
