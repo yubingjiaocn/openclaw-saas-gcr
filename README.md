@@ -322,7 +322,10 @@ cdk destroy openclaw-saas-vpc --force
 | Helm operator install timeout | ghcr.io chart pull slow in CN | Retry; chart is ~50KB so usually succeeds. Operator **image** is mirrored via `OPERATOR_IMAGE_REPO` |
 | `aws eks create-access-entry` fails | EKS auth mode is `CONFIG_MAP` only | Recreate cluster with `authentication_mode=API_AND_CONFIG_MAP` (set in `eks.py`) |
 | Platform API DB connection error | `DATABASE_URL` missing `+asyncpg` driver | `deploy.sh` now builds `postgresql+asyncpg://...`; if manually set, add the prefix |
-| ALB Controller ImagePullBackOff in CN | Default image registry unreachable | Set `ALB_CONTROLLER_IMAGE` in `.env`; `deploy.sh` constructs ECR image URI |
+| ALB Controller ImagePullBackOff in CN | Default image registry unreachable | Set `ALB_CONTROLLER_IMAGE` and `ALB_CONTROLLER_TAG` in `.env`; `deploy.sh` constructs ECR image URI |
+| ALB Controller `ec2:CreateSecurityGroup` denied | Node role missing EC2 permissions | Fixed: `iam.py` adds inline policy with EC2 SG, WAF, Shield, and SLR permissions |
+| Custom image build fails / stale base | Dockerfile pinned to old ECR `BASE_TAG` | Fixed: Dockerfile now uses `ghcr.io/openclaw/openclaw:latest`; no `BASE_TAG` arg needed |
+| `target-partitions` mismatch in CDK | Hardcoded partition in `cdk.json` | Fixed: `app.py` auto-infers partition from region (`cn-*` → `aws-cn`, else `aws`) |
 
 ## Branch Workflow
 
