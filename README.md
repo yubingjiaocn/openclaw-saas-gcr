@@ -311,7 +311,7 @@ cdk destroy openclaw-saas-vpc --force
 
 | Issue | Cause | Fix |
 |-------|-------|-----|
-| CDK deploys to wrong region | CDK CLI uses default profile region | Set `aws_region` in `cdk.json` context |
+| CDK deploys to wrong region | CDK CLI uses default profile region | Set `AWS_REGION` in `.env` (preferred) or `aws_region` in `cdk.json` |
 | `kubectl: Unauthorized` | CDK cluster needs role assumption | Add `--role-arn` to `update-kubeconfig` |
 | `sts:AssumeRole AccessDenied` | IAM user lacks permission | Add inline policy for `sts:AssumeRole` on `openclaw-saas-eks-*` |
 | ECR stack `AlreadyExists` | Repos survive stack deletion | `aws ecr delete-repository --force` first |
@@ -320,6 +320,9 @@ cdk destroy openclaw-saas-vpc --force
 | metrics-exporter CrashLoop | Port 9090 conflict with otel-collector | Fixed in v0.3.0+ (no Prometheus server) |
 | No usage metrics | OpenClaw not sending OTEL data | Fixed in v0.9.52 (diagnostics-otel plugin) |
 | Helm operator install timeout | ghcr.io chart pull slow in CN | Retry; chart is ~50KB so usually succeeds. Operator **image** is mirrored via `OPERATOR_IMAGE_REPO` |
+| `aws eks create-access-entry` fails | EKS auth mode is `CONFIG_MAP` only | Recreate cluster with `authentication_mode=API_AND_CONFIG_MAP` (set in `eks.py`) |
+| Platform API DB connection error | `DATABASE_URL` missing `+asyncpg` driver | `deploy.sh` now builds `postgresql+asyncpg://...`; if manually set, add the prefix |
+| ALB Controller ImagePullBackOff in CN | Default image registry unreachable | Set `ALB_CONTROLLER_IMAGE` in `.env`; `deploy.sh` constructs ECR image URI |
 
 ## Branch Workflow
 
