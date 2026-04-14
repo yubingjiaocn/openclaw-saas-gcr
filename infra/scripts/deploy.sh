@@ -288,8 +288,8 @@ create_platform_secret() {
   local db_username=$(echo "${db_secret}" | jq -r .username)
   local db_password=$(echo "${db_secret}" | jq -r .password)
 
-  # Create database URL
-  local database_url="postgresql://${db_username}:${db_password}@${db_endpoint}:${db_port}/${db_name}"
+  # Create database URL (asyncpg driver required by SQLAlchemy async engine)
+  local database_url="postgresql+asyncpg://${db_username}:${db_password}@${db_endpoint}:${db_port}/${db_name}"
 
   # Compose full agent image URI: bare repo name gets ECR registry prepended
   local agent_image="${DEFAULT_AGENT_IMAGE:-}"
