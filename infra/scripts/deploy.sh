@@ -197,13 +197,25 @@ install_alb_controller() {
   helm repo add eks https://aws.github.io/eks-charts
   helm repo update
 
+  # Build helm args
+  local helm_args=(
+    --set clusterName="${cluster_name}"
+    --set serviceAccount.create=true
+    --set region="${region}"
+    --set vpcId="${vpc_id}"
+  )
+
+  # In CN regions, mirror ALB controller image to ECR for reliability
+  if [[ -n "${ALB_CONTROLLER_IMAGE:-}" ]]; then
+    local ecr_registry=$(get_stack_output "${STACK_PREFIX}-ecr" "PlatformRepoUriOutput" | cut -d/ -f1)
+    helm_args+=(--set "image.repository=${ecr_registry}/${ALB_CONTROLLER_IMAGE}")
+    log_info "Using mirrored ALB controller image: ${ecr_registry}/${ALB_CONTROLLER_IMAGE}"
+  fi
+
   # Install ALB controller
   helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
     -n kube-system \
-    --set clusterName="${cluster_name}" \
-    --set serviceAccount.create=true \
-    --set region="${region}" \
-    --set vpcId="${vpc_id}"
+    "${helm_args[@]}"
 
   log_info "AWS Load Balancer Controller installed"
 }
