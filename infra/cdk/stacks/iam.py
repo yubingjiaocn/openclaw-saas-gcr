@@ -94,12 +94,89 @@ class IamStack(cdk.Stack):
         # (OpenAI, Anthropic) with their own API keys.
 
         # ——— Node Role: AWS Load Balancer Controller ———
-        # ALB Controller runs on nodes (not IRSA) and needs ELB permissions
-        # to create/manage NLBs for LoadBalancer-type Services.
+        # ALB Controller runs on nodes (not IRSA) and needs ELB + EC2 SG +
+        # Shield/WAF + IAM service-linked-role permissions.
         if node_role is not None:
             node_role.add_managed_policy(
                 iam.ManagedPolicy.from_aws_managed_policy_name(
                     "ElasticLoadBalancingFullAccess"
+                )
+            )
+
+            # EC2 permissions for security group and target management
+            node_role.add_to_principal_policy(
+                iam.PolicyStatement(
+                    sid="AlbControllerEc2",
+                    effect=iam.Effect.ALLOW,
+                    actions=[
+                        "ec2:CreateSecurityGroup",
+                        "ec2:DeleteSecurityGroup",
+                        "ec2:AuthorizeSecurityGroupIngress",
+                        "ec2:RevokeSecurityGroupIngress",
+                        "ec2:CreateTags",
+                        "ec2:DeleteTags",
+                        "ec2:DescribeSecurityGroups",
+                        "ec2:DescribeInstances",
+                        "ec2:DescribeSubnets",
+                        "ec2:DescribeVpcs",
+                        "ec2:DescribeAvailabilityZones",
+                        "ec2:DescribeAccountAttributes",
+                        "ec2:DescribeInternetGateways",
+                        "ec2:DescribeNetworkInterfaces",
+                        "ec2:DescribeTargetGroups",
+                        "ec2:DescribeTargetHealth",
+                        "ec2:ModifyNetworkInterfaceAttribute",
+                    ],
+                    resources=["*"],
+                )
+            )
+
+            # Shield permissions (needed even if Shield is not subscribed)
+            node_role.add_to_principal_policy(
+                iam.PolicyStatement(
+                    sid="AlbControllerShield",
+                    effect=iam.Effect.ALLOW,
+                    actions=[
+                        "shield:GetSubscriptionState",
+                        "shield:DescribeProtection",
+                        "shield:CreateProtection",
+                        "shield:DeleteProtection",
+                    ],
+                    resources=["*"],
+                )
+            )
+
+            # WAF permissions
+            node_role.add_to_principal_policy(
+                iam.PolicyStatement(
+                    sid="AlbControllerWaf",
+                    effect=iam.Effect.ALLOW,
+                    actions=[
+                        "waf-regional:GetWebACLForResource",
+                        "waf-regional:GetWebACL",
+                        "waf-regional:AssociateWebACL",
+                        "waf-regional:DisassociateWebACL",
+                        "wafv2:GetWebACL",
+                        "wafv2:GetWebACLForResource",
+                        "wafv2:AssociateWebACL",
+                        "wafv2:DisassociateWebACL",
+                    ],
+                    resources=["*"],
+                )
+            )
+
+            # IAM service-linked role creation for ELB
+            node_role.add_to_principal_policy(
+                iam.PolicyStatement(
+                    sid="AlbControllerSlr",
+                    effect=iam.Effect.ALLOW,
+                    actions=["iam:CreateServiceLinkedRole"],
+                    resources=["*"],
+                    conditions={
+                        "StringEquals": {
+                            "iam:AWSServiceName": "elasticloadbalancing.amazonaws.com"
+                        }
+                    },
                 )
             )
 
