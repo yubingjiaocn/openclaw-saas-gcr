@@ -81,7 +81,7 @@
 ### 1. 登录 ECR
 
 ```bash
-export AWS_ACCOUNT_ID=735091234506
+export AWS_ACCOUNT_ID=<YOUR_ACCOUNT_ID>
 export AWS_DEFAULT_REGION=cn-northwest-1
 ECR=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com.cn
 
