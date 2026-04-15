@@ -76,6 +76,8 @@
 
 中国区 EKS 节点无法拉取 Docker Hub / ghcr.io 镜像。所有上游镜像必须 mirror 到 CN ECR，平台镜像需要构建后推送。
 
+### 需要配置 aws configure, 环境准备参考 [EC2.md](EC2.md)。
+
 ### 1. 登录 ECR
 
 ```bash
@@ -211,7 +213,7 @@ docker buildx build --platform linux/arm64 --no-cache \
 
 适合 Workshop 和快速搭建。单个模板包含所有基础设施 + 一台 EC2 跳板机。
 
-### 1. 部署 CloudFormation Stack
+### 1. 部署 CloudFormation Stack （可通过 console 部署）
 
 ```bash
 export AWS_PROFILE=default
@@ -253,9 +255,7 @@ aws eks update-kubeconfig --name openclaw-prod --region cn-northwest-1
 kubectl get nodes
 ```
 
-### 4. 镜像准备 (可在 EC2 环境操作， 但是 mirror 步骤可能有网络问题)
-
-完成上方 [镜像准备](#镜像准备两种方式通用) 章节的所有步骤（mirror 上游镜像 + 构建平台镜像）。
+### 4. 镜像准备 (已在准备阶段完成)
 
 ### 5. 部署 K8s 组件 & 平台 (EC2 环境操作)
 
@@ -326,7 +326,7 @@ cd ..
 # 步骤 1：部署 CDK + 创建 ECR 仓库（跳过 K8s，因为镜像还没构建）
 ./scripts/deploy.sh --skip-k8s
 
-# 步骤 2：完成上方「镜像准备」章节的所有步骤（mirror + 构建平台镜像）
+# 步骤 2：完成上方「镜像准备」章节的所有步骤（mirror + 构建平台镜像 + charts 等）
 
 # 步骤 3：部署 K8s 组件 + 平台（跳过 CDK，已部署完成）
 ./scripts/deploy.sh --skip-cdk
@@ -442,6 +442,20 @@ kubectl delete ns openclaw-platform
 
 # 2. 删除 Stack
 aws cloudformation delete-stack --stack-name openclaw-prod
+
+# 3. 手动删除 ECR 仓库（含镜像）
+for repo in openclaw-saas-platform openclaw-saas-metrics-exporter openclaw-saas-billing-consumer; do
+  aws ecr delete-repository --repository-name ${repo} --force --region cn-northwest-1
+done
+
+for repo in openclaw/openclaw nginx astral-sh/uv otel/opentelemetry-collector \
+            openclaw-rocks/openclaw-operator eks/aws-load-balancer-controller; do
+  aws ecr delete-repository --repository-name ${repo} --force --region cn-northwest-1
+done
+
+for repo in charts/aws-load-balancer-controller charts/openclaw-operator; do
+  aws ecr delete-repository --repository-name ${repo} --force --region cn-northwest-1
+done
 ```
 
 ### CDK
@@ -470,6 +484,10 @@ done
 
 for repo in openclaw/openclaw nginx astral-sh/uv otel/opentelemetry-collector \
             openclaw-rocks/openclaw-operator eks/aws-load-balancer-controller; do
+  aws ecr delete-repository --repository-name ${repo} --force --region cn-northwest-1
+done
+
+for repo in charts/aws-load-balancer-controller charts/openclaw-operator; do
   aws ecr delete-repository --repository-name ${repo} --force --region cn-northwest-1
 done
 
