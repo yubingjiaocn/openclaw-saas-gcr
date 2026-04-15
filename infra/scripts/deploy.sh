@@ -4,9 +4,10 @@ set -euo pipefail
 # OpenClaw SaaS Infrastructure Deployment Script
 #
 # This script deploys the complete OpenClaw SaaS platform:
-# 1. CDK stacks (VPC, EKS, RDS, ECR, SQS, S3, IAM, DNS)
-# 2. Kubernetes components (ALB controller, openclaw-operator)
-# 3. Platform API application
+# 1. CDK stacks (VPC, EKS, EFS, RDS, SQS, S3, IAM)
+# 2. ECR repositories (via AWS CLI)
+# 3. Kubernetes components (ALB controller, openclaw-operator)
+# 4. Platform API application
 #
 # Prerequisites:
 #   - AWS CLI configured
@@ -27,19 +28,13 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-# Load .env file if present
-ENV_FILE="${REPO_ROOT}/.env"
-if [[ -f "${ENV_FILE}" ]]; then
-  set -a; source "${ENV_FILE}"; set +a
-fi
-
 # Default options
 SKIP_CDK=false
 SKIP_K8S=false
 PLATFORM_VERSION=""
 
 # Load .env file if present
-ENV_FILE="${SCRIPT_DIR}/../.env"
+ENV_FILE="${REPO_ROOT}/.env"
 if [[ -f "${ENV_FILE}" ]]; then
   echo -e "\033[0;32m==>\033[0m Loading configuration from ${ENV_FILE}"
   set -a; source "${ENV_FILE}"; set +a
@@ -93,11 +88,6 @@ log_error() {
 check_prerequisites() {
   log_info "Checking prerequisites..."
 
-  # Load .env if present
-  if [[ -f "${ENV_FILE}" ]]; then
-    log_info "Loading configuration from ${ENV_FILE}"
-  fi
-
   local missing=()
 
   command -v aws &> /dev/null || missing+=("aws-cli")
@@ -146,13 +136,21 @@ deploy_cdk() {
   log_info "Bootstrapping CDK..."
   cdk bootstrap
 
-  # Deploy all stacks (pass environment-specific CDK context from .env)
-  log_info "Deploying all CDK stacks..."
+  # Build CDK context args — pass deployer role for EKS Access Entry
   local cdk_context=""
-  [[ -n "${DOMAIN_NAME:-}" ]] && cdk_context+="-c domain_name=${DOMAIN_NAME} "
-  [[ -n "${HOSTED_ZONE_ID:-}" ]] && cdk_context+="-c hosted_zone_id=${HOSTED_ZONE_ID} "
-  [[ -n "${HOSTED_ZONE_NAME:-}" ]] && cdk_context+="-c hosted_zone_name=${HOSTED_ZONE_NAME} "
-  [[ -n "${ACM_CERT_ARN:-}" ]] && cdk_context+="-c acm_cert_arn=${ACM_CERT_ARN} "
+  local caller_arn=$(aws sts get-caller-identity --query 'Arn' --output text 2>/dev/null || echo "")
+  if [[ -n "${caller_arn}" ]]; then
+    # Convert assumed-role ARN to role ARN for Access Entry
+    local deployer_role=$(echo "${caller_arn}" | sed 's|:assumed-role/|:role/|; s|/i-[^/]*$||; s|/[^/]*$||')
+    # Only pass if it looks like a role ARN (not user ARN)
+    if [[ "${deployer_role}" == *":role/"* ]]; then
+      cdk_context+="-c deployer_role_arn=${deployer_role} "
+      log_info "Will grant EKS cluster-admin to: ${deployer_role}"
+    fi
+  fi
+
+  # Deploy all stacks
+  log_info "Deploying all CDK stacks..."
   cdk deploy --all --require-approval never ${cdk_context}
 
   log_info "CDK stacks deployed successfully"
@@ -160,21 +158,79 @@ deploy_cdk() {
   cd "${REPO_ROOT}"
 }
 
+# ===========================================================================
+# ECR Repository Management (replaces CDK ECR stack)
+# ===========================================================================
+create_ecr_repos() {
+  log_info "Creating ECR repositories..."
+
+  local region="${AWS_REGION:-${AWS_DEFAULT_REGION}}"
+
+  # Platform image repos
+  local repos=(
+    "${PROJECT_NAME}-platform"
+    "${PROJECT_NAME}-metrics-exporter"
+    "${PROJECT_NAME}-billing-consumer"
+  )
+
+  for repo in "${repos[@]}"; do
+    if aws ecr describe-repositories --repository-names "${repo}" --region "${region}" &>/dev/null; then
+      log_info "ECR repo ${repo} already exists"
+    else
+      aws ecr create-repository \
+        --repository-name "${repo}" \
+        --image-scanning-configuration scanOnPush=true \
+        --region "${region}"
+      log_info "Created ECR repo: ${repo}"
+    fi
+  done
+
+  # Agent / operator mirror repos (for CN regions)
+  local mirror_repos=(
+    "openclaw/openclaw"
+    "nginx"
+    "astral-sh/uv"
+    "otel/opentelemetry-collector"
+    "openclaw-rocks/openclaw-operator"
+    "eks/aws-load-balancer-controller"
+  )
+
+  for repo in "${mirror_repos[@]}"; do
+    if aws ecr describe-repositories --repository-names "${repo}" --region "${region}" &>/dev/null; then
+      log_info "ECR mirror repo ${repo} already exists"
+    else
+      aws ecr create-repository \
+        --repository-name "${repo}" \
+        --image-scanning-configuration scanOnPush=false \
+        --region "${region}" 2>/dev/null || true
+      log_info "Created ECR mirror repo: ${repo}"
+    fi
+  done
+
+  # Derive ECR registry from account + region
+  local account_id="${AWS_ACCOUNT_ID:-$(aws sts get-caller-identity --query Account --output text)}"
+  local suffix=""
+  [[ "${region}" == cn-* ]] && suffix=".cn"
+  ECR_REGISTRY="${account_id}.dkr.ecr.${region}.amazonaws.com${suffix}"
+
+  log_info "ECR registry: ${ECR_REGISTRY}"
+}
+
 configure_kubectl() {
   log_info "Configuring kubectl..."
 
-  # Get cluster name from CDK output
   local cluster_name=$(get_stack_output "${STACK_PREFIX}-eks" "ClusterName")
 
   if [[ -z "${cluster_name}" ]]; then
     log_error "Could not find EKS cluster name in stack outputs"
   fi
 
+  # No --role-arn needed: CDK creates an Access Entry for the deployer identity
   log_info "Updating kubeconfig for cluster: ${cluster_name}"
   aws eks update-kubeconfig --name "${cluster_name}" --region "${AWS_REGION}"
 
   # Wait for cluster to be ready
-  log_info "Waiting for cluster to be ready..."
+  log_info "Waiting for nodes to be ready..."
   kubectl wait --for=condition=Ready nodes --all --timeout=300s || true
 
   log_info "kubectl configured successfully"
@@ -205,14 +261,13 @@ install_alb_controller() {
     --set vpcId="${vpc_id}"
   )
 
-  # In CN regions, mirror ALB controller image to ECR for reliability
+  # In CN regions, use mirrored ALB controller image from ECR
   if [[ -n "${ALB_CONTROLLER_IMAGE:-}" ]]; then
-    local ecr_registry=$(get_stack_output "${STACK_PREFIX}-ecr" "PlatformRepoUriOutput" | cut -d/ -f1)
-    helm_args+=(--set "image.repository=${ecr_registry}/${ALB_CONTROLLER_IMAGE}")
+    helm_args+=(--set "image.repository=${ECR_REGISTRY}/${ALB_CONTROLLER_IMAGE}")
     if [[ -n "${ALB_CONTROLLER_TAG:-}" ]]; then
       helm_args+=(--set "image.tag=${ALB_CONTROLLER_TAG}")
     fi
-    log_info "Using mirrored ALB controller image: ${ecr_registry}/${ALB_CONTROLLER_IMAGE}:${ALB_CONTROLLER_TAG:-latest}"
+    log_info "Using mirrored ALB controller image: ${ECR_REGISTRY}/${ALB_CONTROLLER_IMAGE}:${ALB_CONTROLLER_TAG:-latest}"
   fi
 
   # Install ALB controller
@@ -232,14 +287,13 @@ install_openclaw_operator() {
     --set crds.install=true
   )
 
-  # In CN regions, mirror operator image to ECR for reliability
+  # In CN regions, use mirrored operator image from ECR
   if [[ -n "${OPERATOR_IMAGE_REPO:-}" ]]; then
-    local ecr_registry=$(get_stack_output "${STACK_PREFIX}-ecr" "PlatformRepoUriOutput" | cut -d/ -f1)
     helm_set_args+=(
-      --set "image.repository=${ecr_registry}/${OPERATOR_IMAGE_REPO}"
+      --set "image.repository=${ECR_REGISTRY}/${OPERATOR_IMAGE_REPO}"
       --set "image.tag=v${operator_version}"
     )
-    log_info "Using mirrored operator image: ${ecr_registry}/${OPERATOR_IMAGE_REPO}:v${operator_version}"
+    log_info "Using mirrored operator image: ${ECR_REGISTRY}/${OPERATOR_IMAGE_REPO}:v${operator_version}"
   fi
 
   # Check if already installed
@@ -254,6 +308,7 @@ install_openclaw_operator() {
     helm install openclaw-operator \
       oci://ghcr.io/openclaw-rocks/charts/openclaw-operator \
       --namespace openclaw-operator-system \
+      --create-namespace \
       --version "${operator_version}" \
       "${helm_set_args[@]}"
   fi
@@ -264,7 +319,7 @@ install_openclaw_operator() {
 create_platform_secret() {
   log_info "Creating platform-api-config secret..."
 
-  # Ensure namespace exists (needed on first deploy before platform manifests)
+  # Ensure namespace exists
   kubectl create ns openclaw-platform --dry-run=client -o yaml | kubectl apply -f - 2>/dev/null
 
   # Validate required variables
@@ -282,16 +337,15 @@ create_platform_secret() {
   fi
 
   # Auto-populate from CDK outputs
-  local db_secret_arn=$(get_stack_output "${STACK_PREFIX}-rds" "DbSecretArn")
-  local db_endpoint=$(get_stack_output "${STACK_PREFIX}-rds" "DbEndpoint")
-  local db_port=$(get_stack_output "${STACK_PREFIX}-rds" "DbPort")
+  local db_secret_arn=$(get_stack_output "${STACK_PREFIX}-rds" "RDSSecretArn")
+  local db_endpoint=$(get_stack_output "${STACK_PREFIX}-rds" "RDSEndpoint")
+  local db_port=$(get_stack_output "${STACK_PREFIX}-rds" "RDSPort")
   local db_name=$(get_stack_output "${STACK_PREFIX}-rds" "DbName")
   local queue_url=$(get_stack_output "${STACK_PREFIX}-sqs" "UsageQueueUrl")
-  local ecr_registry=$(get_stack_output "${STACK_PREFIX}-ecr" "PlatformRepoUriOutput" | cut -d/ -f1)
 
   # Read metrics-exporter version from VERSION file if not set
   if [[ -z "${METRICS_EXPORTER_TAG:-}" ]]; then
-    local me_version_file="${REPO_ROOT}/platform/metrics-exporter/VERSION"
+    local me_version_file="${REPO_ROOT}/../platform/metrics-exporter/VERSION"
     if [[ -f "${me_version_file}" ]]; then
       METRICS_EXPORTER_TAG="v$(cat "${me_version_file}" | tr -d '[:space:]')"
       log_info "Read metrics-exporter version from VERSION file: ${METRICS_EXPORTER_TAG}"
@@ -303,16 +357,16 @@ create_platform_secret() {
   local db_username=$(echo "${db_secret}" | jq -r .username)
   local db_password=$(echo "${db_secret}" | jq -r .password)
 
-  # Create database URL (asyncpg driver required by SQLAlchemy async engine)
+  # Create database URL (asyncpg driver)
   local database_url="postgresql+asyncpg://${db_username}:${db_password}@${db_endpoint}:${db_port}/${db_name}"
 
-  # Compose full agent image URI: bare repo name gets ECR registry prepended
+  # Compose full agent image URI
   local agent_image="${DEFAULT_AGENT_IMAGE:-}"
   if [[ -n "${agent_image}" && ! "${agent_image}" == *"."* ]]; then
-    agent_image="${ecr_registry}/${agent_image}"
+    agent_image="${ECR_REGISTRY}/${agent_image}"
   fi
 
-  # Create or update secret with all configuration
+  # Create or update secret
   kubectl create secret generic platform-api-config \
     -n openclaw-platform \
     --from-literal=DATABASE_URL="${database_url}" \
@@ -325,10 +379,10 @@ create_platform_secret() {
     --from-literal=AWS_REGION="${AWS_REGION}" \
     --from-literal=AWS_PARTITION="${AWS_PARTITION:-aws}" \
     --from-literal=AWS_ACCOUNT_ID="${AWS_ACCOUNT_ID}" \
-    --from-literal=ECR_REGISTRY="${ecr_registry:-}" \
+    --from-literal=ECR_REGISTRY="${ECR_REGISTRY:-}" \
     --from-literal=AVAILABLE_CHANNELS="${AVAILABLE_CHANNELS:-feishu}" \
     --from-literal=DEFAULT_AGENT_IMAGE="${agent_image}" \
-    --from-literal=DEFAULT_AGENT_IMAGE_TAG="${DEFAULT_AGENT_IMAGE_TAG}" \
+    --from-literal=DEFAULT_AGENT_IMAGE_TAG="${DEFAULT_AGENT_IMAGE_TAG:-latest}" \
     --from-literal=METRICS_EXPORTER_REPO="${METRICS_EXPORTER_REPO}" \
     --from-literal=METRICS_EXPORTER_TAG="${METRICS_EXPORTER_TAG}" \
     --dry-run=client -o yaml | kubectl apply -f -
@@ -339,39 +393,22 @@ create_platform_secret() {
 deploy_platform_api() {
   log_info "Deploying platform API..."
 
-  # Get ECR repository URI
-  local ecr_repo_uri=$(get_stack_output "${STACK_PREFIX}-ecr" "PlatformRepoUriOutput")
-
-  if [[ -z "${ecr_repo_uri}" ]]; then
-    log_error "Could not find ECR repository URI"
-  fi
+  local platform_repo="${PROJECT_NAME}-platform"
 
   # Determine image version
   if [[ -z "${PLATFORM_VERSION}" ]]; then
     log_info "No version specified, using latest from ECR..."
     PLATFORM_VERSION=$(aws ecr describe-images \
-      --repository-name "${PROJECT_NAME}-${ENVIRONMENT}-platform" \
+      --repository-name "${platform_repo}" \
       --query 'sort_by(imageDetails,& imagePushedAt)[-1].imageTags[0]' \
       --output text 2>/dev/null || echo "latest")
   fi
 
-  local platform_image="${ecr_repo_uri}:${PLATFORM_VERSION}"
+  local platform_image="${ECR_REGISTRY}/${platform_repo}:${PLATFORM_VERSION}"
   log_info "Using platform image: ${platform_image}"
-
-  # Get ACM cert ARN and domain name
-  local acm_cert_arn=$(get_stack_output "${STACK_PREFIX}-dns" "CertificateArn" || echo "")
-  local domain_name=$(get_stack_output "${STACK_PREFIX}-dns" "DomainName" || echo "")
-
-  if [[ -z "${acm_cert_arn}" ]] || [[ -z "${domain_name}" ]]; then
-    log_warn "No custom domain configured, using ALB default DNS"
-    acm_cert_arn="none"
-    domain_name="*"
-  fi
 
   # Apply K8s manifests with substitution
   export PLATFORM_IMAGE="${platform_image}"
-  export ACM_CERT_ARN="${acm_cert_arn}"
-  export DOMAIN_NAME="${domain_name}"
 
   cd "${REPO_ROOT}/k8s/platform"
   bash apply.sh
@@ -382,10 +419,9 @@ deploy_platform_api() {
 deploy_billing_consumer() {
   log_info "Deploying billing consumer..."
 
-  local ecr_registry=$(get_stack_output "${STACK_PREFIX}-ecr" "PlatformRepoUriOutput" | cut -d/ -f1)
-  local billing_repo="${BILLING_CONSUMER_REPO:-openclaw-saas-billing-consumer}"
+  local billing_repo="${BILLING_CONSUMER_REPO:-${PROJECT_NAME}-billing-consumer}"
   local billing_tag="${BILLING_CONSUMER_TAG:-v0.1.1}"
-  local billing_image="${ecr_registry}/${billing_repo}:${billing_tag}"
+  local billing_image="${ECR_REGISTRY}/${billing_repo}:${billing_tag}"
 
   log_info "Using billing image: ${billing_image}"
 
@@ -397,35 +433,15 @@ deploy_billing_consumer() {
   log_info "Billing consumer deployed"
 }
 
-run_db_migration() {
-  log_info "Running database migration..."
-
-  # Wait for platform API to be ready
-  log_info "Waiting for platform-api pod to be ready..."
-  kubectl wait --for=condition=Ready pod -l app=platform-api -n openclaw-platform --timeout=300s
-
-  # Run migration
-  local pod_name=$(kubectl get pod -l app=platform-api -n openclaw-platform -o jsonpath='{.items[0].metadata.name}')
-  log_info "Running migration in pod: ${pod_name}"
-
-  kubectl exec -n openclaw-platform "${pod_name}" -- python -m alembic upgrade head || {
-    log_warn "Migration command failed, but this may be expected if migrations are not set up yet"
-  }
-
-  log_info "Database migration complete"
-}
-
 verify_deployment() {
   log_info "Verifying deployment..."
 
-  # Check platform API health
   local pod_name=$(kubectl get pod -l app=platform-api -n openclaw-platform -o jsonpath='{.items[0].metadata.name}')
 
   log_info "Platform API pod: ${pod_name}"
   kubectl get pod -n openclaw-platform "${pod_name}"
 
-  # Get ingress URL
-  local ingress_host=$(kubectl get ingress platform-ingress -n openclaw-platform -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+  local ingress_host=$(kubectl get ingress platform-ingress -n openclaw-platform -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || echo "")
 
   if [[ -n "${ingress_host}" ]]; then
     log_info "Platform API accessible at: https://${ingress_host}"
@@ -444,7 +460,11 @@ main() {
   # Get config from cdk.json
   PROJECT_NAME=$(jq -r '.context.project_name' "${REPO_ROOT}/cdk/cdk.json")
   ENVIRONMENT=$(jq -r '.context.environment' "${REPO_ROOT}/cdk/cdk.json")
-  if [[ -n "${ENVIRONMENT}" ]]; then STACK_PREFIX="${PROJECT_NAME}-${ENVIRONMENT}"; else STACK_PREFIX="${PROJECT_NAME}"; fi
+  if [[ -n "${ENVIRONMENT}" && "${ENVIRONMENT}" != "null" ]]; then
+    STACK_PREFIX="${PROJECT_NAME}-${ENVIRONMENT}"
+  else
+    STACK_PREFIX="${PROJECT_NAME}"
+  fi
 
   log_info "Project: ${PROJECT_NAME}, Environment: ${ENVIRONMENT:-<none>}, Stack prefix: ${STACK_PREFIX}"
 
@@ -454,6 +474,9 @@ main() {
     log_warn "Skipping CDK deployment (--skip-cdk)"
   fi
 
+  # Create ECR repos (always, idempotent)
+  create_ecr_repos
+
   if [[ "${SKIP_K8S}" == "false" ]]; then
     configure_kubectl
     install_alb_controller
@@ -461,7 +484,6 @@ main() {
     create_platform_secret
     deploy_platform_api
     deploy_billing_consumer
-    run_db_migration
     verify_deployment
   else
     log_warn "Skipping Kubernetes deployment (--skip-k8s)"

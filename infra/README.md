@@ -1,73 +1,89 @@
 # OpenClaw SaaS Infrastructure — China Region
 
-AWS CDK stacks + Kubernetes manifests + deployment automation for OpenClaw SaaS on EKS (cn-northwest-1).
+AWS CDK stacks + Kubernetes manifests + 部署自动化脚本，部署 OpenClaw SaaS 到 EKS (cn-northwest-1)。
 
-## Directory Structure
+## 目录结构
 
-| Directory | Description |
-|-----------|-------------|
-| `cdk/` | CDK stacks: VPC, EKS, RDS, S3, SQS, ECR, IAM |
-| `k8s/platform/` | Kubernetes manifests (deployment, service, rbac) |
-| `scripts/deploy.sh` | Automated deployment script |
-| `.env.cn` | China (cn-northwest-1) environment template |
-| `.env.global` | Global (us-west-2) environment template |
-| `.env.example` | Generic template with docs |
+| 目录 | 说明 |
+|------|------|
+| `cdk/` | CDK stacks: VPC, EKS, EFS, RDS, S3, SQS, IAM, Karpenter |
+| `k8s/platform/` | Kubernetes manifests (deployment, service, rbac, ingress) |
+| `k8s-platform/` | 平台级 K8s 资源 (billing-consumer, ingress, karpenter, operator, storage) |
+| `scripts/deploy.sh` | 自动化部署脚本 |
+| `observability/` | Prometheus + Grafana 配置 |
+| `docs/` | 架构图、Runbook |
+| `.env.cn` | 中国区环境变量模板 |
 
-## Configuration
+## 配置
 
-### `.env` — Single Source of Truth
+### `.env` — 配置中心
 
-All deployment config lives in `.env`. No hardcoded defaults in `deploy.sh`.
+所有部署配置集中在 `.env`，`deploy.sh` 自动加载。
 
 ```bash
-# Pick environment:
 cp .env.cn .env
-
-# Fill credentials:
-vim .env    # Set ADMIN_PASSWORD, JWT_SECRET
+vim .env    # 填写 ADMIN_PASSWORD, JWT_SECRET, AWS_ACCOUNT_ID
 ```
 
-See `.env.example` for full variable reference.
+详细变量说明见根目录 [README.md](../README.md#env--配置中心)。
 
-### `cdk.json` — Infrastructure Parameters
+### `cdk.json` — 基础设施参数
 
-Instance types, cluster size, region — all in `cdk/cdk.json` context.
+实例类型、集群规模、VPC CIDR 等在 `cdk/cdk.json` context 中配置。
 
-**CN-specific:** `aws_region: cn-northwest-1`, `target-partitions: ["aws-cn"]`
+关键参数：
 
-## Deploy
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `cluster_name` | `openclaw-prod` | EKS 集群名 |
+| `eks_version` | `1.31` | Kubernetes 版本 |
+| `eks_node_instance_type` | `m6g.xlarge` | 节点实例类型 (Graviton) |
+| `eks_node_min/max/desired` | 2/4/2 | 节点组伸缩配置 |
+| `vpc_cidr` | `172.31.0.0/16` | VPC CIDR |
+| `vpc_max_azs` | 3 | 可用区数量 |
+| `db_instance_class` | `db.t4g.medium` | RDS 实例类型 |
 
-### Prerequisites
+## 部署
 
-- AWS CLI configured (`~/.aws/config` with `[profile cn]`)
+### 前置条件
+
+- AWS CLI 已配置 (`~/.aws/config`)
 - CDK CLI, kubectl, helm, jq, Docker with buildx
-- IAM user with `sts:AssumeRole` on `openclaw-saas-eks-*` roles
+- IAM 身份具备 Admin 或足够权限
 
-### Full Deploy
+### 完整部署
 
 ```bash
-export AWS_PROFILE=cn
+export AWS_PROFILE=default
 export AWS_DEFAULT_REGION=cn-northwest-1
 
-# 1. Configure
+# 1. 配置
 cd infra && cp .env.cn .env && vim .env
 
-# 2. CDK
+# 2. CDK 部署
 cd cdk && python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
 cdk bootstrap aws://${AWS_ACCOUNT_ID}/${AWS_DEFAULT_REGION}
+
 cdk deploy openclaw-saas-vpc --require-approval never
-cdk deploy openclaw-saas-ecr openclaw-saas-sqs openclaw-saas-s3 --require-approval never --concurrency 3
+cdk deploy openclaw-saas-karpenter-node openclaw-saas-sqs openclaw-saas-s3 --require-approval never --concurrency 3
 cdk deploy openclaw-saas-eks --require-approval never                    # ~15 min
+cdk deploy openclaw-saas-efs --require-approval never
 cdk deploy openclaw-saas-iam openclaw-saas-rds --require-approval never --concurrency 2
 cd ..
 
-# 3. Build & push images (see root README)
+# 3. 构建 & 推送镜像（见根目录 README）
 
-# 4. Deploy K8s
+# 4. 部署 K8s 组件 + 平台
 ./scripts/deploy.sh --skip-cdk
 ```
 
-### Update Platform Only
+> **EC2 IAM Role 用户注意：** 如果在 EC2 上手动执行 `cdk deploy`（而非通过 `deploy.sh`），需要额外传入 role ARN：
+> ```bash
+> cdk deploy openclaw-saas-eks -c deployer_role_arn=arn:aws-cn:iam::123456789012:role/MyEC2Role
+> ```
+> 如果改用 `./scripts/deploy.sh`（不带 `--skip-cdk`）来部署，脚本会自动检测当前 IAM Role 并传入，无需手动指定。
+
+### 仅更新平台
 
 ```bash
 ./scripts/deploy.sh --skip-cdk
@@ -75,68 +91,102 @@ cd ..
 
 ### CDK Stacks
 
-| Stack | Resources | ~Deploy Time |
-|-------|-----------|-------------|
-| vpc | VPC, Subnets, NAT, Endpoints | 3 min |
-| ecr | 3 container repos | 30s |
-| sqs | Usage events queue + DLQ | 30s |
-| s3 | Backups bucket | 30s |
-| eks | EKS cluster, 2× Graviton t4g.medium | 15 min |
-| iam | IRSA roles, node policies | 1 min |
-| rds | PostgreSQL t4g.micro | 5 min |
+| Stack | 资源 | 部署时间 |
+|-------|------|---------|
+| vpc | VPC, 3 AZ, NAT, VPC Endpoints (S3/ECR/STS) | ~3 min |
+| karpenter-node | Karpenter Node Role + Instance Profile | ~30s |
+| sqs | Usage Events + DLQ + Karpenter 中断队列 + 4 条 EventBridge 规则 | ~30s |
+| s3 | 备份桶 + Backup Role (Pod Identity) | ~30s |
+| eks | EKS 集群 (L1 CfnCluster), 节点组, Addons, OIDC, Access Entry | ~15 min |
+| efs | EFS 共享存储 + Mount Targets | ~2 min |
+| iam | ALB Controller (IRSA), Karpenter Controller (IRSA), EFS CSI (Pod Identity), Platform API (Pod Identity), 节点 SQS/ALB 权限 | ~1 min |
+| rds | PostgreSQL 16, db.t4g.medium, gp3 加密 | ~5 min |
 
-## deploy.sh Flow
+> **注意：** CDK 使用 L1 construct (CfnCluster)，不创建 Lambda。EKS 集群创建者是你的 IAM 身份，`kubectl` 直接可用。ECR 仓库由 `deploy.sh` 创建（不在 CDK 中）。
+
+## deploy.sh 流程
 
 ```
 main()
-  ├── Load .env
   ├── check_prerequisites
   ├── deploy_cdk (unless --skip-cdk)
-  ├── configure_kubectl (with --role-arn for CDK-created cluster)
+  │     └── 自动检测 deployer IAM Role → 传入 CDK 创建 Access Entry
+  ├── create_ecr_repos          ← 创建平台 + mirror 仓库
+  ├── configure_kubectl         ← 无需 --role-arn
   ├── install_alb_controller
   ├── install_openclaw_operator
-  ├── create_platform_secret ← reads .env + CDK outputs → K8s Secret
+  ├── create_platform_secret    ← 从 CDK 输出 + .env 组装 K8s Secret
   ├── deploy_platform_api
-  ├── run_db_migration
+  ├── deploy_billing_consumer
   └── verify_deployment
 ```
 
-## Destroy
+## EKS 访问
+
+CDK 部署时自动检测当前 IAM 身份，通过 EKS Access Entry 授予 cluster-admin 权限。无需手动 assume role 或修改 trust policy。
 
 ```bash
-export AWS_PROFILE=cn AWS_DEFAULT_REGION=cn-northwest-1
+# 直接访问，无需 --role-arn
+aws eks update-kubeconfig --name openclaw-prod --region cn-northwest-1
+kubectl get nodes
+```
 
-# 1. Clean K8s resources first
+## 与 CloudFormation 模板的关系
+
+`cloudformation/cloudformation-ec2.yaml` 和 CDK 创建的资源完全一致：
+
+| 资源 | CloudFormation | CDK |
+|------|---------------|-----|
+| VPC (3 AZ, NAT) | ✅ | ✅ |
+| EKS + Addons + Pod Identity Agent | ✅ | ✅ |
+| EFS | ✅ | ✅ |
+| Karpenter (Node Role + Controller + SQS + EventBridge) | ✅ | ✅ |
+| ALB Controller IAM (IRSA) | ✅ | ✅ |
+| RDS PostgreSQL 16 | ✅ | ✅ |
+| SQS (Usage + DLQ) | ✅ | ✅ |
+| S3 + Backup Role | ✅ | ✅ |
+| EC2 跳板机 | ✅ | ❌ (不需要) |
+| ECR 仓库 | ❌ | ❌ (deploy.sh 创建) |
+
+CloudFormation 额外包含 EC2 跳板机（含完整 IAM 权限），适合 Workshop 场景。CDK 适合生产环境持续迭代。
+
+## 销毁
+
+```bash
+export AWS_PROFILE=default AWS_DEFAULT_REGION=cn-northwest-1
+
+# 1. 清理 K8s 资源
 kubectl delete openclawinstance --all --all-namespaces
 kubectl delete ns openclaw-platform
 
-# 2. CDK destroy (reverse order)
+# 2. CDK 反序销毁
 cd cdk
 cdk destroy openclaw-saas-rds openclaw-saas-iam --force
-# Empty S3 bucket first:
-BUCKET=$(aws s3 ls | grep openclaw-saas-backups | awk '{print $3}')
+cdk destroy openclaw-saas-efs --force
+# 清空 S3 桶
+BUCKET=$(aws s3 ls | grep openclaw-backups | awk '{print $3}')
 aws s3 rm s3://${BUCKET} --recursive
 cdk destroy openclaw-saas-s3 --force
 cdk destroy openclaw-saas-eks --force    # ~15-20 min
-# ECR repos with images need manual deletion:
-for repo in openclaw-saas-platform openclaw-saas-billing-consumer openclaw-saas-metrics-exporter; do
-  aws ecr delete-repository --repository-name ${repo} --force --region ${AWS_DEFAULT_REGION}
-done
-cdk destroy openclaw-saas-ecr --force
-cdk destroy openclaw-saas-sqs --force
+cdk destroy openclaw-saas-sqs openclaw-saas-karpenter-node --force
 cdk destroy openclaw-saas-vpc --force
+
+# 3. 手动删除 ECR 仓库
+for repo in openclaw-saas-platform openclaw-saas-metrics-exporter openclaw-saas-billing-consumer; do
+  aws ecr delete-repository --repository-name ${repo} --force --region cn-northwest-1
+done
 ```
 
-**Note:** ECR repos with images and S3 buckets with data survive `cdk destroy`. Delete manually first.
+> ECR 仓库含镜像和 S3 桶含数据时不会被自动删除，需手动清理。
 
-## Cost Estimate (CN)
+## 成本估算 (CN)
 
-~$150-200/month:
+~$150-200/月：
 
-| Resource | Monthly Cost |
-|----------|-------------|
-| EKS control plane | ~$73 |
-| 2× t4g.medium nodes | ~$30 |
-| RDS t4g.micro | ~$13 |
+| 资源 | 月费 |
+|------|------|
+| EKS 控制面 | ~$73 |
+| 2× m6g.xlarge 节点 | ~$60 |
+| RDS db.t4g.medium | ~$25 |
 | NAT Gateway | ~$32 |
-| Other (S3, SQS, VPC endpoints) | ~$20 |
+| 其他 (S3, SQS, EFS, VPC Endpoints) | ~$20 |

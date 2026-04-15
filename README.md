@@ -1,10 +1,10 @@
 # OpenClaw SaaS on EKS — China Region
 
-Multi-tenant OpenClaw SaaS platform for **AWS China Region** (cn-northwest-1, Ningxia).
+多租户 OpenClaw SaaS 平台，部署在 **AWS 中国区** (cn-northwest-1, 宁夏)。
 
-> For Global (us-west-2), see [`main`](https://github.com/chenxqdu/openclaw-saas-gcr/tree/main).
+> Global (us-west-2) 版本见 [`main`](https://github.com/chenxqdu/openclaw-saas-gcr/tree/main) 分支。
 
-## Architecture
+## 架构
 
 ```
                     Internet
@@ -45,163 +45,191 @@ Multi-tenant OpenClaw SaaS platform for **AWS China Region** (cn-northwest-1, Ni
     └─────────┘
 ```
 
+## 区域差异
+
 | | Global (`main`) | China (`cn`) |
 |---|---|---|
 | **Region** | us-west-2 | cn-northwest-1 |
-| **Account** | 956045422469 | 735091234506 |
 | **Partition** | `aws` | `aws-cn` |
-| **Default LLM** | bedrock-irsa (no key needed) | openai-compatible |
-| **Agent Image** | Upstream openclaw | Custom (pre-installed tools) |
-| **Channels** | All | Feishu |
+| **默认 LLM** | bedrock-irsa (无需 key) | openai-compatible |
+| **Agent 镜像** | 上游 openclaw | Mirror /Custom (预装工具) |
+| **渠道** | 全部 | 飞书 |
 | **Ingress** | NLB + CloudFront | NLB |
 | **ECR** | Private (us-west-2) | Private (cn-northwest-1) |
 
-## Quick Start
+## 部署方式
 
-### 1. Configure Environment
+提供两种部署方式，资源完全一致：
+
+| 方式 | 适用场景 | 说明 |
+|------|---------|------|
+| **CloudFormation** | Workshop / 快速演示 | 单模板一键部署，含 EC2 跳板机 |
+| **CDK** | 生产 / 持续迭代 | 分 Stack 管理，`deploy.sh` 自动化 |
+
+两种方式创建的 AWS 资源相同：VPC (3 AZ) → EKS → EFS → RDS → SQS → S3 → Karpenter → ALB Controller IAM。
+
+---
+
+## 镜像准备（两种方式通用）
+
+> **⚠️ 需要能访问 ghcr.io、Docker Hub、public.ecr.aws 的网络环境。** 中国区 EC2 默认无法访问这些源。建议在本地或有外网访问能力的机器上完成镜像 mirror，再推送到 CN ECR。
+
+中国区 EKS 节点无法拉取 Docker Hub / ghcr.io 镜像。所有上游镜像必须 mirror 到 CN ECR，平台镜像需要构建后推送。
+
+### 1. 登录 ECR
 
 ```bash
-cd infra
-
-# Use the pre-filled CN template:
-cp .env.cn .env
-
-# Fill in required credentials:
-vim .env    # Set ADMIN_PASSWORD, JWT_SECRET
-```
-
-All deployment config lives in `.env`. No hardcoded values elsewhere.
-
-### 2. Deploy Infrastructure (CDK)
-
-> **⚠️ Critical:** CDK reads `AWS_REGION` from `.env` (loaded by `deploy.sh`) → `CDK_DEFAULT_REGION` → `aws_region` in `cdk.json`. Ensure one of these is set.
-
-```bash
-export AWS_PROFILE=cn
+export AWS_ACCOUNT_ID=735091234506
 export AWS_DEFAULT_REGION=cn-northwest-1
-
-cd infra/cdk
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-
-# Bootstrap (first time only)
-cdk bootstrap aws://${AWS_ACCOUNT_ID}/${AWS_DEFAULT_REGION}
-
-# Deploy step by step (recommended over --all to avoid OOM):
-cdk deploy openclaw-saas-vpc --require-approval never
-cdk deploy openclaw-saas-ecr openclaw-saas-sqs openclaw-saas-s3 --require-approval never --concurrency 3
-cdk deploy openclaw-saas-eks --require-approval never                    # ~15 min
-cdk deploy openclaw-saas-iam openclaw-saas-rds --require-approval never --concurrency 2
-```
-
-**CDK Stacks:** vpc, ecr, sqs, s3, eks (K8s 1.30, 2× Graviton t4g.medium), iam, rds (PostgreSQL t4g.micro)
-
-### 3. EKS Access Setup
-
-CDK creates the EKS cluster with a Lambda-managed IAM role. Your IAM user needs to assume that role:
-
-```bash
-# Get the creation role ARN from CDK output
-CREATION_ROLE=$(aws cloudformation describe-stacks \
-  --stack-name openclaw-saas-eks --region ${AWS_DEFAULT_REGION} --profile ${AWS_PROFILE} \
-  --query 'Stacks[0].Outputs[?OutputKey==`KubectlRoleArn`].OutputValue' --output text)
-
-# Configure kubectl
-aws eks update-kubeconfig \
-  --name openclaw-saas-cluster --region ${AWS_DEFAULT_REGION} \
-  --profile ${AWS_PROFILE} --role-arn "${CREATION_ROLE}"
-
-# Verify
-kubectl get nodes
-```
-
-### 4. Mirror Upstream Images to CN ECR
-
-CN nodes cannot pull from Docker Hub / ghcr.io. All images the operator uses must be
-mirrored into CN ECR **before** deploying any agent. The operator's `spec.registry`
-field rewrites image references automatically.
-
-The **operator itself** also needs to be mirrored — otherwise `helm install/upgrade`
-will timeout waiting for the pod to pull from ghcr.io.
-
-```bash
 ECR=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com.cn
 
-# Login
-aws ecr get-login-password --region ${AWS_DEFAULT_REGION} --profile ${AWS_PROFILE} | \
+aws ecr get-login-password --region ${AWS_DEFAULT_REGION} | \
   docker login --username AWS --password-stdin ${ECR}
+```
 
-# Create ECR repos (nested paths supported)
-for repo in openclaw/openclaw nginx astral-sh/uv otel/opentelemetry-collector openclaw-rocks/openclaw-operator; do
+### 2. 创建 ECR 仓库
+
+```bash
+# Mirror 仓库（上游镜像）
+for repo in openclaw/openclaw nginx astral-sh/uv otel/opentelemetry-collector \
+            openclaw-rocks/openclaw-operator eks/aws-load-balancer-controller; do
   aws ecr create-repository --repository-name "$repo" \
     --image-scanning-configuration scanOnPush=false \
-    --region ${AWS_DEFAULT_REGION} --profile ${AWS_PROFILE} 2>/dev/null || true
+    --region ${AWS_DEFAULT_REGION} 2>/dev/null || true
 done
 
-# --- Agent images (rewritten by spec.registry) ---
+# 平台镜像仓库
+for repo in openclaw-saas-platform openclaw-saas-metrics-exporter openclaw-saas-billing-consumer; do
+  aws ecr create-repository --repository-name "$repo" \
+    --image-scanning-configuration scanOnPush=true \
+    --region ${AWS_DEFAULT_REGION} 2>/dev/null || true
+done
+```
+
+> CDK 方式中 `deploy.sh` 会自动创建这些仓库，可跳过此步。
+
+### 3. Mirror 上游镜像
+
+```bash
+# Agent 镜像
 docker pull ghcr.io/openclaw/openclaw:latest
-docker tag  ghcr.io/openclaw/openclaw:latest          ${ECR}/openclaw/openclaw:latest
+docker tag  ghcr.io/openclaw/openclaw:latest ${ECR}/openclaw/openclaw:latest
 docker push ${ECR}/openclaw/openclaw:latest
 
+# Operator 镜像
+docker pull ghcr.io/openclaw-rocks/openclaw-operator:v0.26.2
+docker tag  ghcr.io/openclaw-rocks/openclaw-operator:v0.26.2 ${ECR}/openclaw-rocks/openclaw-operator:v0.26.2
+docker push ${ECR}/openclaw-rocks/openclaw-operator:v0.26.2
+
+# ALB Controller 镜像
+docker pull public.ecr.aws/eks/aws-load-balancer-controller:v2.12.0
+docker tag  public.ecr.aws/eks/aws-load-balancer-controller:v2.12.0 ${ECR}/eks/aws-load-balancer-controller:v2.12.0
+docker push ${ECR}/eks/aws-load-balancer-controller:v2.12.0
+
+# Sidecar 镜像
 docker pull nginx:1.27-alpine
-docker tag  nginx:1.27-alpine                         ${ECR}/nginx:1.27-alpine
+docker tag  nginx:1.27-alpine ${ECR}/nginx:1.27-alpine
 docker push ${ECR}/nginx:1.27-alpine
 
 docker pull ghcr.io/astral-sh/uv:0.6-bookworm-slim
-docker tag  ghcr.io/astral-sh/uv:0.6-bookworm-slim     ${ECR}/astral-sh/uv:0.6-bookworm-slim
+docker tag  ghcr.io/astral-sh/uv:0.6-bookworm-slim ${ECR}/astral-sh/uv:0.6-bookworm-slim
 docker push ${ECR}/astral-sh/uv:0.6-bookworm-slim
 
 docker pull otel/opentelemetry-collector:0.120.0
-docker tag  otel/opentelemetry-collector:0.120.0        ${ECR}/otel/opentelemetry-collector:0.120.0
+docker tag  otel/opentelemetry-collector:0.120.0 ${ECR}/otel/opentelemetry-collector:0.120.0
 docker push ${ECR}/otel/opentelemetry-collector:0.120.0
-
-# --- Operator image (used by Helm via OPERATOR_IMAGE_REPO) ---
-docker pull ghcr.io/openclaw-rocks/openclaw-operator:v0.26.2
-docker tag  ghcr.io/openclaw-rocks/openclaw-operator:v0.26.2  ${ECR}/openclaw-rocks/openclaw-operator:v0.26.2
-docker push ${ECR}/openclaw-rocks/openclaw-operator:v0.26.2
 ```
 
-**Registry → ECR path mapping:**
+**镜像映射表：**
 
-| Upstream Image | CN ECR Repo |
-|---|---|
+| 上游镜像 | CN ECR 路径 |
+|---------|------------|
 | `ghcr.io/openclaw/openclaw:latest` | `${ECR}/openclaw/openclaw:latest` |
+| `ghcr.io/openclaw-rocks/openclaw-operator:v0.26.2` | `${ECR}/openclaw-rocks/openclaw-operator:v0.26.2` |
+| `public.ecr.aws/eks/aws-load-balancer-controller:v2.12.0` | `${ECR}/eks/aws-load-balancer-controller:v2.12.0` |
 | `nginx:1.27-alpine` | `${ECR}/nginx:1.27-alpine` |
 | `ghcr.io/astral-sh/uv:0.6-bookworm-slim` | `${ECR}/astral-sh/uv:0.6-bookworm-slim` |
 | `otel/opentelemetry-collector:0.120.0` | `${ECR}/otel/opentelemetry-collector:0.120.0` |
-| `ghcr.io/openclaw-rocks/openclaw-operator:v0.26.2` | `${ECR}/openclaw-rocks/openclaw-operator:v0.26.2` |
 
-> **Note:** Agent images are rewritten by the operator's `spec.registry` field
-> (set automatically by platform API when `AWS_PARTITION=aws-cn`).
-> The operator's own image is overridden via `OPERATOR_IMAGE_REPO` in `.env` →
-> `deploy.sh` passes `--set image.repository` to Helm.
-
-### 5. Build & Push Platform Images
+### 4. 构建 & 推送平台镜像
 
 ```bash
-# Platform API
+# arm64 匹配 Graviton 节点；x86 EC2 上构建需要先注册 QEMU：
+# docker run --privileged --rm tonistiigi/binfmt --install arm64
+
 docker buildx build --platform linux/arm64 --no-cache \
   -t ${ECR}/openclaw-saas-platform:v$(cat platform/VERSION) --push platform/
 
-# Metrics Exporter
 docker buildx build --platform linux/arm64 --no-cache \
   -t ${ECR}/openclaw-saas-metrics-exporter:v$(cat platform/metrics-exporter/VERSION) --push platform/metrics-exporter/
 
-# Billing Consumer
 docker buildx build --platform linux/arm64 --no-cache \
   -t ${ECR}/openclaw-saas-billing-consumer:v$(cat platform/billing/VERSION) --push platform/billing/
 ```
 
-### 6. Deploy Platform
+---
+
+## 方式一：CloudFormation 部署
+
+适合 Workshop 和快速搭建。单个模板包含所有基础设施 + 一台 EC2 跳板机。
+
+### 1. 部署 CloudFormation Stack
+
+```bash
+export AWS_PROFILE=default
+export AWS_DEFAULT_REGION=cn-northwest-1
+
+aws cloudformation create-stack \
+  --stack-name openclaw-prod \
+  --template-body file://cloudformation/cloudformation-ec2.yaml \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --parameters \
+    ParameterKey=ClusterName,ParameterValue=openclaw-prod \
+    ParameterKey=AvailabilityZones,ParameterValue="cn-northwest-1a\,cn-northwest-1b\,cn-northwest-1c" \
+    ParameterKey=KeyPairName,ParameterValue=your-key-name ## 注意替换
+```
+
+部署约 20-25 分钟。Stack 包含：
+
+| 资源 | 说明 |
+|------|------|
+| VPC | 3 AZ，6 子网，1 NAT Gateway |
+| EKS | K8s 1.31+，Graviton m6g.xlarge 节点 |
+| EFS | 共享存储 |
+| RDS | PostgreSQL 16，db.t4g.medium |
+| SQS | Usage Events + DLQ + Karpenter 中断队列 |
+| S3 | 备份桶 |
+| EC2 | 跳板机 (t3.medium)，自带 EKS Admin 权限 |
+| Karpenter | 完整 IAM + EventBridge 中断处理 |
+
+### 2. EC2 环境准备
+
+SSH 或 SSM 登录 EC2 后，安装部署工具。详见 [EC2.md](EC2.md)。
+
+### 3. 配置 EKS 访问
+
+EC2 已通过 Access Entry 自动获得集群管理员权限，无需额外配置：
+
+```bash
+aws eks update-kubeconfig --name openclaw-prod --region cn-northwest-1
+kubectl get nodes
+```
+
+### 4. 镜像准备
+
+完成上方 [镜像准备](#镜像准备两种方式通用) 章节的所有步骤（mirror 上游镜像 + 构建平台镜像）。
+
+### 5. 部署 K8s 组件 & 平台
 
 ```bash
 cd infra
+cp .env.cn .env
+vim .env    # 填写 ADMIN_PASSWORD, JWT_SECRET, AWS_ACCOUNT_ID
+
 ./scripts/deploy.sh --skip-cdk
 ```
 
-`deploy.sh` handles: kubectl config → ALB Controller → OpenClaw Operator → K8s Secret → Platform API → DB migration → verification.
-
-### 7. Verify
+### 6. 验证
 
 ```bash
 kubectl get pods -n openclaw-platform
@@ -210,138 +238,212 @@ curl http://localhost:8000/health
 # {"status":"ok","version":"0.9.53"}
 ```
 
-## Configuration
+---
 
-### `.env` — Single Source of Truth
+## 方式二：CDK 部署
 
-All deployment configuration is centralized in `infra/.env`:
+适合生产环境和持续迭代。分 Stack 管理，支持增量更新。
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `ADMIN_EMAIL` | ✅ | Admin account email |
-| `ADMIN_PASSWORD` | ✅ | Admin account password |
-| `JWT_SECRET` | ✅ | JWT signing secret (`openssl rand -hex 32`) |
+### 1. 配置环境
+
+```bash
+cd infra
+cp .env.cn .env
+vim .env    # 填写 ADMIN_PASSWORD, JWT_SECRET, AWS_ACCOUNT_ID
+
+export AWS_PROFILE=default
+export AWS_DEFAULT_REGION=cn-northwest-1
+```
+
+### 2. 部署基础设施 + 构建镜像 + 部署平台
+
+首次需要安装 CDK 依赖和 bootstrap：
+
+```bash
+cd infra/cdk && python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
+cdk bootstrap aws://${AWS_ACCOUNT_ID}/${AWS_DEFAULT_REGION}
+cd ..
+```
+
+推荐的首次部署流程——先部署基础设施，再准备镜像，最后部署 K8s：
+
+```bash
+# 步骤 1：部署 CDK + 创建 ECR 仓库（跳过 K8s，因为镜像还没构建）
+./scripts/deploy.sh --skip-k8s
+
+# 步骤 2：完成上方「镜像准备」章节的所有步骤（mirror + 构建平台镜像）
+
+# 步骤 3：部署 K8s 组件 + 平台（跳过 CDK，已部署完成）
+./scripts/deploy.sh --skip-cdk
+```
+
+后续更新只需：
+
+```bash
+./scripts/deploy.sh --skip-cdk
+```
+
+### 3. 手动分步部署（可选）
+
+如果需要逐步控制，可以手动执行 CDK 部署：
+
+```bash
+cd infra/cdk
+source .venv/bin/activate
+
+cdk deploy openclaw-saas-vpc --require-approval never
+cdk deploy openclaw-saas-karpenter-node openclaw-saas-sqs openclaw-saas-s3 --require-approval never --concurrency 3
+cdk deploy openclaw-saas-eks --require-approval never                    # ~15 分钟
+cdk deploy openclaw-saas-efs --require-approval never
+cdk deploy openclaw-saas-iam openclaw-saas-rds --require-approval never --concurrency 2
+cd ..
+
+# 然后跳过 CDK 只部署 K8s 部分
+./scripts/deploy.sh --skip-cdk
+```
+
+> **EC2 IAM Role 用户注意：** 如果在 EC2 上手动执行 `cdk deploy`（而非通过 `deploy.sh`），需要额外传入 role ARN 以获得 EKS 集群访问权限：
+> ```bash
+> cdk deploy openclaw-saas-eks -c deployer_role_arn=arn:aws-cn:iam::123456789012:role/MyEC2Role --require-approval never
+> ```
+> `deploy.sh` 会自动检测当前 IAM Role 并传入。
+
+---
+
+## 配置
+
+### `.env` — 配置中心
+
+所有部署配置集中在 `infra/.env`：
+
+| 变量 | 必填 | 说明 |
+|------|------|------|
+| `ADMIN_EMAIL` | ✅ | 管理员邮箱 |
+| `ADMIN_PASSWORD` | ✅ | 管理员密码 |
+| `JWT_SECRET` | ✅ | JWT 签名密钥 (`openssl rand -hex 32`) |
 | `AWS_REGION` | ✅ | `cn-northwest-1` |
 | `AWS_PARTITION` | ✅ | `aws-cn` |
-| `AWS_ACCOUNT_ID` | ✅ | `735091234506` |
+| `AWS_ACCOUNT_ID` | ✅ | AWS 账号 ID |
 | `METRICS_EXPORTER_REPO` | ✅ | `openclaw-saas-metrics-exporter` |
 | `METRICS_EXPORTER_TAG` | ✅ | `v0.3.1` |
-| `K8S_IN_CLUSTER` | | Default: `true` |
-| `LOG_LEVEL` | | Default: `INFO` |
-| `AVAILABLE_CHANNELS` | | Default: `feishu` |
 | `DEFAULT_AGENT_IMAGE` | | CN custom image |
-| `DEFAULT_AGENT_IMAGE_TAG` | | Default: `latest` |
-| `OPERATOR_IMAGE_REPO` | | ECR repo path for operator image (CN: `openclaw-rocks/openclaw-operator`) |
-| `OPERATOR_VERSION` | | Operator chart/image version (default: `0.26.2`) |
+| `OPERATOR_IMAGE_REPO` | | ECR 中 operator 镜像路径 |
+| `ALB_CONTROLLER_IMAGE` | | ECR 中 ALB controller 镜像路径 |
 
-Auto-populated by `deploy.sh` from CDK outputs: `DATABASE_URL`, `SQS_QUEUE_URL`, `ECR_REGISTRY`.
+`deploy.sh` 自动从 CDK/CF 输出填充：`DATABASE_URL`、`SQS_QUEUE_URL`、`ECR_REGISTRY`。
 
-### `cdk.json` — Infrastructure Parameters
+### `cdk.json` — 基础设施参数
 
-Instance types, cluster size, domain — all in `cdk/cdk.json` context.
+实例类型、集群规模、VPC CIDR 等在 `infra/cdk/cdk.json` 中配置。
 
-**CN-specific:** `target-partitions` is auto-inferred from the region (no manual setting needed).
+---
 
-## Components
+## 组件
 
 ### Platform API (`platform/`)
 
-FastAPI backend + React web console. Manages tenants, agents, channels, billing.
+FastAPI 后端 + React Web Console。管理租户、Agent、渠道、计费。
 
 ### Metrics Exporter (`platform/metrics-exporter/`)
 
-Sidecar that scrapes otel-collector Prometheus endpoint, computes usage deltas, pushes to SQS for billing.
+Agent Pod Sidecar。抓取 otel-collector Prometheus 端点，计算用量增量，推送到 SQS。
 
-**Data flow:** OpenClaw (diagnostics-otel plugin) → otel-collector `:9090/metrics` → metrics-exporter → SQS
+**数据流：** OpenClaw → otel-collector `:9090/metrics` → metrics-exporter → SQS
 
 ### Billing Consumer (`platform/billing/`)
 
-Consumes SQS usage events, aggregates into daily/monthly billing records.
+消费 SQS 用量事件，聚合为日/月计费记录。
 
-### Agent Pod Architecture
+### Agent Pod 架构
 
-Each agent runs as a StatefulSet with 4 containers:
+每个 Agent 以 StatefulSet 运行，包含 4 个容器：
 
-| Container | Purpose |
-|-----------|---------|
-| `openclaw` | OpenClaw agent (Node.js, 3072MB heap) |
+| 容器 | 用途 |
+|------|------|
+| `openclaw` | OpenClaw Agent (Node.js, 3072MB heap) |
 | `otel-collector` | OTLP → Prometheus metrics on `:9090` |
-| `metrics-exporter` | Scrape otel-collector → SQS usage events |
-| `gateway-proxy` | nginx reverse proxy for gateway |
+| `metrics-exporter` | 抓取 otel-collector → SQS 用量事件 |
+| `gateway-proxy` | nginx 反向代理 |
 
-**CN image mirroring:** The operator's `spec.registry` field rewrites all image
-references to use CN ECR. See [Step 4](#4-mirror-upstream-images-to-cn-ecr).
+### LLM 供应商 (CN)
 
-### LLM Providers (CN)
-
-| Provider | Auth | Notes |
-|----------|------|-------|
-| `openai-compatible` | API key + base URL | **CN default.** Any OpenAI-compatible endpoint |
-| `bedrock-apikey` | `AWS_BEARER_TOKEN_BEDROCK` | Global Bedrock API key (cross-region) |
+| 供应商 | 认证方式 | 说明 |
+|--------|---------|------|
+| `openai-compatible` | API key + base URL | **CN 默认**，任何 OpenAI 兼容端点 |
+| `bedrock-apikey` | `AWS_BEARER_TOKEN_BEDROCK` | Global Bedrock API key (跨区域) |
 | `openai` | API key | |
 | `anthropic` | API key | |
 
-## Destroy & Redeploy
+---
+
+## 销毁
+
+### CloudFormation
 
 ```bash
-export AWS_PROFILE=cn AWS_DEFAULT_REGION=cn-northwest-1
-
-# 1. Clean K8s resources first
+# 1. 清理 K8s 资源
 kubectl delete openclawinstance --all --all-namespaces
 kubectl delete ns openclaw-platform
 
-# 2. CDK destroy (reverse order)
+# 2. 删除 Stack
+aws cloudformation delete-stack --stack-name openclaw-prod
+```
+
+### CDK
+
+```bash
 cd infra/cdk
+
+# 1. 清理 K8s 资源
+kubectl delete openclawinstance --all --all-namespaces
+kubectl delete ns openclaw-platform
+
+# 2. 反序销毁
 cdk destroy openclaw-saas-rds openclaw-saas-iam --force
-# Empty S3 bucket first:
-BUCKET=$(aws s3 ls | grep openclaw-saas-backups | awk '{print $3}')
+cdk destroy openclaw-saas-efs --force
+BUCKET=$(aws s3 ls | grep openclaw-backups | awk '{print $3}')
 aws s3 rm s3://${BUCKET} --recursive
 cdk destroy openclaw-saas-s3 --force
 cdk destroy openclaw-saas-eks --force    # ~15-20 min
-# ECR repos with images need manual deletion:
-for repo in openclaw-saas-platform openclaw-saas-billing-consumer openclaw-saas-metrics-exporter; do
-  aws ecr delete-repository --repository-name ${repo} --force --region ${AWS_DEFAULT_REGION}
-done
-cdk destroy openclaw-saas-ecr --force
-cdk destroy openclaw-saas-sqs --force
+cdk destroy openclaw-saas-sqs openclaw-saas-karpenter-node --force
 cdk destroy openclaw-saas-vpc --force
+
+# 3. 手动删除 ECR 仓库（含镜像）
+for repo in openclaw-saas-platform openclaw-saas-metrics-exporter openclaw-saas-billing-consumer; do
+  aws ecr delete-repository --repository-name ${repo} --force --region cn-northwest-1
+done
 ```
 
-## Troubleshooting
+---
 
-| Issue | Cause | Fix |
-|-------|-------|-----|
-| CDK deploys to wrong region | CDK CLI uses default profile region | Set `AWS_REGION` in `.env` (preferred) or `aws_region` in `cdk.json` |
-| `kubectl: Unauthorized` | CDK cluster needs role assumption | Add `--role-arn` to `update-kubeconfig` |
-| `sts:AssumeRole AccessDenied` | IAM user lacks permission | Add inline policy for `sts:AssumeRole` on `openclaw-saas-eks-*` |
-| ECR stack `AlreadyExists` | Repos survive stack deletion | `aws ecr delete-repository --force` first |
-| S3 stack `BucketNotEmpty` | Bucket has data | `aws s3 rm --recursive` first |
-| EKS deletion 30+ min | Lambda VPC ENI cleanup | Wait, or manually detach ENIs |
-| metrics-exporter CrashLoop | Port 9090 conflict with otel-collector | Fixed in v0.3.0+ (no Prometheus server) |
-| No usage metrics | OpenClaw not sending OTEL data | Fixed in v0.9.52 (diagnostics-otel plugin) |
-| Helm operator install timeout | ghcr.io chart pull slow in CN | Retry; chart is ~50KB so usually succeeds. Operator **image** is mirrored via `OPERATOR_IMAGE_REPO` |
-| `aws eks create-access-entry` fails | EKS auth mode is `CONFIG_MAP` only | Recreate cluster with `authentication_mode=API_AND_CONFIG_MAP` (set in `eks.py`) |
-| Platform API DB connection error | `DATABASE_URL` missing `+asyncpg` driver | `deploy.sh` now builds `postgresql+asyncpg://...`; if manually set, add the prefix |
-| ALB Controller ImagePullBackOff in CN | Default image registry unreachable | Set `ALB_CONTROLLER_IMAGE` and `ALB_CONTROLLER_TAG` in `.env`; `deploy.sh` constructs ECR image URI |
-| ALB Controller `ec2:CreateSecurityGroup` denied | Node role missing EC2 permissions | Fixed: `iam.py` adds inline policy with EC2 SG, WAF, Shield, and SLR permissions |
-| Custom image build fails / stale base | Dockerfile pinned to old ECR `BASE_TAG` | Fixed: Dockerfile now uses `ghcr.io/openclaw/openclaw:latest`; no `BASE_TAG` arg needed |
-| `target-partitions` mismatch in CDK | Hardcoded partition in `cdk.json` | Fixed: `app.py` auto-infers partition from region (`cn-*` → `aws-cn`, else `aws`) |
+## 问题排查
 
-## Branch Workflow
+| 问题 | 原因 | 解决 |
+|------|------|------|
+| `kubectl: Unauthorized` | CDK L2 集群需要 assume role | CDK 已改为 L1，直接访问；CF 模板通过 Access Entry 授权 |
+| ECR push 报 `no basic auth credentials` | ECR 登录过期 (12h) | 重新 `aws ecr get-login-password` |
+| Pod `CrashLoopBackOff` + `import psycopg2` | `DATABASE_URL` 缺少 `+asyncpg` | deploy.sh 已修复 |
+| ALB Controller ImagePullBackOff | CN 无法拉取默认镜像 | 设置 `ALB_CONTROLLER_IMAGE` 指向 ECR mirror |
+| Helm operator install 超时 | ghcr.io chart 拉取慢 | 重试；chart ~50KB 通常可成功 |
+| `docker buildx --platform` 失败 | 缺少 QEMU | `docker run --privileged --rm tonistiigi/binfmt --install arm64` |
+
+更多排查记录见 [troubleshooting.md](troubleshooting.md)。
+
+## 分支策略
 
 ```
 main (Global) → cn (China) → cn-workshop
 ```
 
-Generic fixes: cherry-pick `main → cn`. CN-specific stays on `cn`. Never reverse-merge.
+通用修复：cherry-pick `main → cn`。CN 专属改动留在 `cn`。不反向合并。
 
-## Versioning
+## 版本
 
-| Component | File | Current |
-|-----------|------|---------|
+| 组件 | 文件 | 当前版本 |
+|------|------|---------|
 | Platform API | `platform/VERSION` | 0.9.53 |
 | Metrics Exporter | `platform/metrics-exporter/VERSION` | 0.3.1 |
 | Billing Consumer | `platform/billing/VERSION` | 0.1.1 |
 | Operator | Helm chart | 0.26.2 |
 
-Bump the VERSION file → build image → update `.env` tag → `deploy.sh`.
+更新流程：修改 VERSION 文件 → 构建镜像 → 更新 `.env` tag → `deploy.sh --skip-cdk`。
