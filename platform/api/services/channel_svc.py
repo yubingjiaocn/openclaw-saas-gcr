@@ -59,6 +59,20 @@ CHANNEL_DEFINITIONS = {
             },
         },
     },
+    "wecom": {
+        "required": ["corp_id", "agent_id", "secret"],
+        "optional": [],
+        "build": lambda creds: {
+            "enabled": True,
+            "accounts": {
+                "default": {
+                    "corpId": creds["corp_id"],
+                    "agentId": creds["agent_id"],
+                    "secret": creds["secret"],
+                }
+            },
+        },
+    },
 }
 
 
