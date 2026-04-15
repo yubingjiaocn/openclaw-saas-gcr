@@ -60,17 +60,13 @@ CHANNEL_DEFINITIONS = {
         },
     },
     "wecom": {
-        "required": ["corp_id", "agent_id", "secret"],
+        "required": ["bot_id", "secret"],
         "optional": [],
         "build": lambda creds: {
             "enabled": True,
-            "accounts": {
-                "default": {
-                    "corpId": creds["corp_id"],
-                    "agentId": creds["agent_id"],
-                    "secret": creds["secret"],
-                }
-            },
+            "connectionMode": "websocket",
+            "botId": creds["bot_id"],
+            "secret": creds["secret"],
         },
     },
 }

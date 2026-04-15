@@ -335,10 +335,10 @@ class K8sClient:
         }
 
         # Enable wecom plugin (official WeCom channel by Tencent)
-        raw_config["plugins"]["allow"] = raw_config["plugins"].get("allow", [])
-        if "@wecom/wecom-openclaw-plugin" not in raw_config["plugins"]["allow"]:
-            raw_config["plugins"]["allow"].append("@wecom/wecom-openclaw-plugin")
-        raw_config["plugins"]["entries"]["@wecom/wecom-openclaw-plugin"] = {
+        raw_config["plugins"]["allow"] = raw_config["plugins"].get("allow", []) 
+        if "wecom-openclaw-plugin" not in raw_config["plugins"]["allow"]:
+            raw_config["plugins"]["allow"].append("wecom-openclaw-plugin")
+        raw_config["plugins"]["entries"]["wecom-openclaw-plugin"] = {
             "enabled": True,
         }
 

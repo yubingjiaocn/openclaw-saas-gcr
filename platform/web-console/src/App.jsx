@@ -696,9 +696,8 @@ function ChannelModal({ tenantName, agentId, agentName, onClose }) {
       { key: 'verify_token', label: 'Verify Token', placeholder: 'my-verify-token' },
     ],
     wecom: [
-      { key: 'corp_id', label: 'Corp ID (企业ID)', placeholder: 'ww1234567890abcdef' },
-      { key: 'agent_id', label: 'Agent ID (应用ID)', placeholder: '1000002' },
-      { key: 'secret', label: 'Secret (应用密钥)', placeholder: 'xxxxxxxxxxxx' },
+      { key: 'bot_id', label: 'Bot ID (机器人ID)', placeholder: 'your-bot-id' },                                                                                                                   
+      { key: 'secret', label: 'Secret (机器人密钥)', placeholder: 'your-bot-secret' }, 
     ],
   }
 

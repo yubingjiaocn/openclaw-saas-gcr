@@ -53,7 +53,7 @@
 | **Partition** | `aws` | `aws-cn` |
 | **默认 LLM** | bedrock-irsa (无需 key) | openai-compatible |
 | **Agent 镜像** | 上游 openclaw | Mirror /Custom (预装工具) |
-| **渠道** | 全部 | 飞书 |
+| **渠道** | 全部 | 飞书、企业微信 |
 | **Ingress** | NLB + CloudFront | NLB |
 | **ECR** | Private (us-west-2) | Private (cn-northwest-1) |
 
@@ -81,7 +81,6 @@
 ### 1. 登录 ECR
 
 ```bash
-export AWS_ACCOUNT_ID=<YOUR_ACCOUNT_ID>
 export AWS_DEFAULT_REGION=cn-northwest-1
 ECR=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com.cn
 
@@ -520,9 +519,43 @@ main (Global) → cn (China) → cn-workshop
 
 | 组件 | 文件 | 当前版本 |
 |------|------|---------|
-| Platform API | `platform/VERSION` | 0.9.53 |
+| Platform API | `platform/VERSION` | 0.9.54 |
 | Metrics Exporter | `platform/metrics-exporter/VERSION` | 0.3.1 |
 | Billing Consumer | `platform/billing/VERSION` | 0.1.1 |
 | Operator | Helm chart | 0.26.2 |
 
-更新流程：修改 VERSION 文件 → 构建镜像 → 更新 `.env` tag → `deploy.sh --skip-cdk`。
+### 镜像更新步骤
+
+以 Platform API 从 v0.9.53 更新到 v0.9.54 为例：
+
+```bash
+# 1. 更新 VERSION 文件（代码已修改完毕的前提下）
+echo "0.9.54" > platform/VERSION
+
+# 2. 更新 .env.cn 中的版本号
+# PLATFORM_VERSION=v0.9.54
+
+# 3. 构建并推送新镜像
+ECR=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com.cn
+
+aws ecr get-login-password --region ${AWS_DEFAULT_REGION} | \
+  docker login --username AWS --password-stdin ${ECR}
+
+docker buildx build --platform linux/arm64 --no-cache \
+  -t ${ECR}/openclaw-saas-platform:v$(cat platform/VERSION) --push platform/
+
+# 4a. 完整部署（会重建 secret + 重新 apply 所有 K8s 资源）
+cd infra && cp .env.cn .env && ./scripts/deploy.sh --skip-cdk
+
+# 4b. 或者快速更新（仅更新镜像，适合只改了代码没改环境变量的场景）
+kubectl set image deployment/platform-api \
+  api=${ECR}/openclaw-saas-platform:v$(cat platform/VERSION) \
+  -n openclaw-platform
+
+# 5. 验证
+kubectl get pods -n openclaw-platform
+curl http://localhost:8000/health
+# {"status":"ok","version":"0.9.54"}
+```
+
+Metrics Exporter 和 Billing Consumer 同理，替换对应的 VERSION 文件、仓库名和 `.env` 变量即可。
