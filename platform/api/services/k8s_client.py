@@ -334,9 +334,16 @@ class K8sClient:
             "runtime": {"ttlMinutes": 120},
         }
 
+        # Enable wecom plugin (official WeCom channel by Tencent)
+        raw_config["plugins"]["allow"] = raw_config["plugins"].get("allow", [])
+        if "@wecom/wecom-openclaw-plugin" not in raw_config["plugins"]["allow"]:
+            raw_config["plugins"]["allow"].append("@wecom/wecom-openclaw-plugin")
+        raw_config["plugins"]["entries"]["@wecom/wecom-openclaw-plugin"] = {
+            "enabled": True,
+        }
+
         # Enable diagnostics-otel plugin so OpenClaw exports metrics/traces
         # to the otel-collector sidecar (managed by operator)
-        raw_config["plugins"]["allow"] = raw_config["plugins"].get("allow", [])
         if "diagnostics-otel" not in raw_config["plugins"]["allow"]:
             raw_config["plugins"]["allow"].append("diagnostics-otel")
         raw_config["plugins"]["entries"]["diagnostics-otel"] = {
@@ -394,6 +401,7 @@ class K8sClient:
                     "tag": effective_image_tag or "latest",
                     "pullPolicy": "Always",
                 }} if effective_image else {}),
+                "plugins": ["@wecom/wecom-openclaw-plugin"],
                 "envFrom": [{"secretRef": {"name": f"{agent_name}-keys"}}],
                 "env": [{"name": "NODE_OPTIONS", "value": "--max-old-space-size=3072"}],
                 "config": {
