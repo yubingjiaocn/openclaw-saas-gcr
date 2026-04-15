@@ -72,7 +72,7 @@
 
 ## 镜像准备（两种方式通用）
 
-> **⚠️ 需要能访问 ghcr.io、Docker Hub、public.ecr.aws 的网络环境。** 中国区 EC2 默认无法访问这些源。建议在本地或有外网访问能力的机器上完成镜像 mirror，再推送到 CN ECR。
+> **⚠️ 需要能访问 ghcr.io、Docker Hub、public.ecr.aws 的网络环境。** 中国区 EC2 无法访问这些源。请在本地机器或 Global 区域 EC2 上完成以下所有镜像准备步骤（mirror 上游镜像 + 构建平台镜像 + mirror Helm charts），构建完直接 push 到 CN ECR。CN EC2 上只需运行 `deploy.sh` 部署 K8s 组件。
 
 中国区 EKS 节点无法拉取 Docker Hub / ghcr.io 镜像。所有上游镜像必须 mirror 到 CN ECR，平台镜像需要构建后推送。
 
@@ -93,6 +93,13 @@ aws ecr get-login-password --region ${AWS_DEFAULT_REGION} | \
 # Mirror 仓库（上游镜像）
 for repo in openclaw/openclaw nginx astral-sh/uv otel/opentelemetry-collector \
             openclaw-rocks/openclaw-operator eks/aws-load-balancer-controller; do
+  aws ecr create-repository --repository-name "$repo" \
+    --image-scanning-configuration scanOnPush=false \
+    --region ${AWS_DEFAULT_REGION} 2>/dev/null || true
+done
+
+# Helm chart 仓库
+for repo in charts/aws-load-balancer-controller charts/openclaw-operator; do
   aws ecr create-repository --repository-name "$repo" \
     --image-scanning-configuration scanOnPush=false \
     --region ${AWS_DEFAULT_REGION} 2>/dev/null || true
@@ -121,11 +128,6 @@ docker pull ghcr.io/openclaw-rocks/openclaw-operator:v0.26.2
 docker tag  ghcr.io/openclaw-rocks/openclaw-operator:v0.26.2 ${ECR}/openclaw-rocks/openclaw-operator:v0.26.2
 docker push ${ECR}/openclaw-rocks/openclaw-operator:v0.26.2
 
-# ALB Controller 镜像
-docker pull public.ecr.aws/eks/aws-load-balancer-controller:v2.12.0
-docker tag  public.ecr.aws/eks/aws-load-balancer-controller:v2.12.0 ${ECR}/eks/aws-load-balancer-controller:v2.12.0
-docker push ${ECR}/eks/aws-load-balancer-controller:v2.12.0
-
 # Sidecar 镜像
 docker pull nginx:1.27-alpine
 docker tag  nginx:1.27-alpine ${ECR}/nginx:1.27-alpine
@@ -138,6 +140,12 @@ docker push ${ECR}/astral-sh/uv:0.6-bookworm-slim
 docker pull otel/opentelemetry-collector:0.120.0
 docker tag  otel/opentelemetry-collector:0.120.0 ${ECR}/otel/opentelemetry-collector:0.120.0
 docker push ${ECR}/otel/opentelemetry-collector:0.120.0
+
+# ALB Controller 镜像
+docker pull public.ecr.aws/eks/aws-load-balancer-controller:v3.2.1
+docker tag  public.ecr.aws/eks/aws-load-balancer-controller:v3.2.1 ${ECR}/eks/aws-load-balancer-controller:v3.2.1
+docker push ${ECR}/eks/aws-load-balancer-controller:v3.2.1
+
 ```
 
 **镜像映射表：**
@@ -146,14 +154,44 @@ docker push ${ECR}/otel/opentelemetry-collector:0.120.0
 |---------|------------|
 | `ghcr.io/openclaw/openclaw:latest` | `${ECR}/openclaw/openclaw:latest` |
 | `ghcr.io/openclaw-rocks/openclaw-operator:v0.26.2` | `${ECR}/openclaw-rocks/openclaw-operator:v0.26.2` |
-| `public.ecr.aws/eks/aws-load-balancer-controller:v2.12.0` | `${ECR}/eks/aws-load-balancer-controller:v2.12.0` |
+| `public.ecr.aws/eks/aws-load-balancer-controller:v3.2.1` | `${ECR}/eks/aws-load-balancer-controller:v3.2.1` |
 | `nginx:1.27-alpine` | `${ECR}/nginx:1.27-alpine` |
 | `ghcr.io/astral-sh/uv:0.6-bookworm-slim` | `${ECR}/astral-sh/uv:0.6-bookworm-slim` |
 | `otel/opentelemetry-collector:0.120.0` | `${ECR}/otel/opentelemetry-collector:0.120.0` |
 
-### 4. 构建 & 推送平台镜像
+### 4. Mirror Helm Charts
 
 ```bash
+# 登录 CN ECR（Helm OCI 需要单独登录）
+aws ecr get-login-password --region ${AWS_DEFAULT_REGION} | \
+  helm registry login --username AWS --password-stdin ${ECR}
+
+# 查看 ALB Controller chart 可用版本（需要外网）
+helm repo add eks https://aws.github.io/eks-charts
+helm repo update
+helm search repo eks/aws-load-balancer-controller --versions | head -5
+
+# 下载并推送 ALB Controller chart
+helm pull eks/aws-load-balancer-controller --version 3.2.1
+helm push aws-load-balancer-controller-3.2.1.tgz oci://${ECR}/charts
+rm -f aws-load-balancer-controller-3.2.1.tgz
+
+# 下载并推送 OpenClaw Operator chart
+helm pull oci://ghcr.io/openclaw-rocks/charts/openclaw-operator --version 0.26.2
+helm push openclaw-operator-0.26.2.tgz oci://${ECR}/charts
+rm -f openclaw-operator-0.26.2.tgz
+```
+
+> 以上步骤需要在能访问 `aws.github.io` 和 `ghcr.io` 的机器上执行。推送到 CN ECR 后，`deploy.sh` 会自动从 ECR 安装 chart。
+
+### 5. 构建 & 推送平台镜像
+
+```bash
+
+git clone https://github.com/chenxqdu/openclaw-saas-gcr.git
+cd openclaw-saas-gcr
+git checkout cn
+
 # arm64 匹配 Graviton 节点；x86 EC2 上构建需要先注册 QEMU：
 # docker run --privileged --rm tonistiigi/binfmt --install arm64
 
@@ -206,7 +244,7 @@ aws cloudformation create-stack \
 
 SSH 或 SSM 登录 EC2 后，安装部署工具。详见 [EC2.md](EC2.md)。
 
-### 3. 配置 EKS 访问
+### 3. 配置 EKS 访问 (EC2 环境操作)
 
 EC2 已通过 Access Entry 自动获得集群管理员权限，无需额外配置：
 
@@ -215,16 +253,25 @@ aws eks update-kubeconfig --name openclaw-prod --region cn-northwest-1
 kubectl get nodes
 ```
 
-### 4. 镜像准备
+### 4. 镜像准备 (可在 EC2 环境操作， 但是 mirror 步骤可能有网络问题)
 
 完成上方 [镜像准备](#镜像准备两种方式通用) 章节的所有步骤（mirror 上游镜像 + 构建平台镜像）。
 
-### 5. 部署 K8s 组件 & 平台
+### 5. 部署 K8s 组件 & 平台 (EC2 环境操作)
 
 ```bash
+git clone https://github.com/chenxqdu/openclaw-saas-gcr.git
+cd openclaw-saas-gcr
+git checkout cn
+
+## 或者通过 sftp/scp 复制文件夹到工作路径
+
 cd infra
 cp .env.cn .env
 vim .env    # 填写 ADMIN_PASSWORD, JWT_SECRET, AWS_ACCOUNT_ID
+
+# CloudFormation 模式：设置 stack 名称（deploy.sh 从这个 stack 读取所有输出）
+echo "CF_STACK_NAME=openclaw-prod" >> .env
 
 ./scripts/deploy.sh --skip-cdk
 ```
@@ -233,20 +280,28 @@ vim .env    # 填写 ADMIN_PASSWORD, JWT_SECRET, AWS_ACCOUNT_ID
 
 ```bash
 kubectl get pods -n openclaw-platform
-kubectl port-forward -n openclaw-platform svc/platform-api 8000:80
+kubectl port-forward -n openclaw-platform svc/platform-api 8000:8000
 curl http://localhost:8000/health
 # {"status":"ok","version":"0.9.53"}
 ```
 
 ---
 
-## 方式二：CDK 部署
+## 方式二：CDK 部署 
 
 适合生产环境和持续迭代。分 Stack 管理，支持增量更新。
+
+以下代码的执行环境参考 EC2.md 要求
 
 ### 1. 配置环境
 
 ```bash
+git clone https://github.com/chenxqdu/openclaw-saas-gcr.git
+cd openclaw-saas-gcr
+git checkout cn
+
+## 或者通过 sftp/scp 复制文件夹到工作路径
+
 cd infra
 cp .env.cn .env
 vim .env    # 填写 ADMIN_PASSWORD, JWT_SECRET, AWS_ACCOUNT_ID
@@ -412,6 +467,12 @@ cdk destroy openclaw-saas-vpc --force
 for repo in openclaw-saas-platform openclaw-saas-metrics-exporter openclaw-saas-billing-consumer; do
   aws ecr delete-repository --repository-name ${repo} --force --region cn-northwest-1
 done
+
+for repo in openclaw/openclaw nginx astral-sh/uv otel/opentelemetry-collector \
+            openclaw-rocks/openclaw-operator eks/aws-load-balancer-controller; do
+  aws ecr delete-repository --repository-name ${repo} --force --region cn-northwest-1
+done
+
 ```
 
 ---

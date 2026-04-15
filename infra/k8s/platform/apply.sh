@@ -22,7 +22,15 @@ echo "    ACM Cert ARN:   ${ACM_CERT_ARN}"
 echo "    Domain Name:    ${DOMAIN_NAME}"
 
 # Apply manifests with variable substitution
-MANIFESTS=(namespace.yaml rbac.yaml service.yaml deployment.yaml ingress.yaml)
+MANIFESTS=(namespace.yaml rbac.yaml service.yaml deployment.yaml)
+
+# Only apply ingress if a real ACM cert and domain are configured
+if [[ "${ACM_CERT_ARN}" != "none" && "${DOMAIN_NAME}" != "*" ]]; then
+  MANIFESTS+=(ingress.yaml)
+else
+  echo "    Skipping ingress.yaml (no custom domain configured)"
+fi
+
 FAILED=()
 
 for manifest in "${MANIFESTS[@]}"; do

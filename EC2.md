@@ -87,25 +87,25 @@ docker run --privileged --rm tonistiigi/binfmt --install arm64
 Vite 7 需要 Node.js 20.19+ 或 22.12+：
 
 ```bash
-curl -fsSL https://rpm.nodesource.com/setup_22.x | sudo bash -
-sudo yum install -y nodejs
+# 通过 nvm 安装（避免与系统包管理器冲突）
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+source ~/.bashrc
+nvm install 22
+nvm use 22
 node --version   # 应 >= 22.12
 ```
 
 ---
 
-## 5. Python 3.11 + CDK
+## 5. Python + CDK
+
+Amazon Linux 2023 自带 Python 3.9，CDK 直接可用，无需额外安装 Python。
 
 ```bash
-# Amazon Linux 2023 自带 Python 3.9，安装 3.11
-sudo yum install -y python3.11 python3.11-pip python3.11-devel
+python3 --version   # 3.9.x
 
-# 设为默认（可选）
-sudo alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
-python3 --version
-
-# 安装 CDK CLI
-sudo npm install -g aws-cdk
+# 安装 CDK CLI（nvm 安装的 npm 不需要 sudo）
+npm install -g aws-cdk
 cdk --version
 ```
 
@@ -202,9 +202,9 @@ aws cloudformation describe-stacks --stack-name openclaw-prod \
 | `docker buildx` 报 `unknown flag: --platform` | 系统包不含 buildx 插件 | 手动安装 buildx 插件（见步骤 3） |
 | `docker push` 层显示 `Unavailable` | `sudo docker push` 凭证隔离 | 统一不用 sudo（加入 docker 组后） |
 | `docker login` 指向 Docker Hub | `${ECR}` 环境变量为空 | 确认 `AWS_ACCOUNT_ID` 和 `AWS_DEFAULT_REGION` 已设置 |
-| `npm install` 报 Node.js 版本太低 | Vite 7 需要 Node.js ≥ 22.12 | 安装 Node.js 22.x（见步骤 4） |
-| `npm install -g` 报 `EACCES` | 全局安装需要 root | 加 `sudo` |
-| `python3 -m venv` 报 `ensurepip` | 缺少 venv 包 | `sudo yum install python3.11-devel` |
+| `npm install` 报 Node.js 版本太低 | Vite 7 需要 Node.js ≥ 22.12 | 用 nvm 安装 Node.js 22（见步骤 4） |
+| `npm install -g` 报 `command not found` | `sudo` 下找不到 nvm 的 npm | 不加 `sudo`，直接 `npm install -g` |
+| `yum`/`dnf` 报 `No module named 'dnf'` | `alternatives` 改了默认 python3 | `sudo ln -sf /usr/bin/python3.9 /usr/bin/python3` 恢复 |
 | `The config profile (cn) could not be found` | 无对应 AWS profile | `export AWS_PROFILE=default` |
 | ECR push 报 `no basic auth credentials` | ECR 登录过期 (12h) | 重新 `aws ecr get-login-password` |
 | CDK deploy 到错误 region | 环境变量未设置 | 确认 `AWS_DEFAULT_REGION=cn-northwest-1` |

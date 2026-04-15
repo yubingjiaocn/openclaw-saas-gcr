@@ -111,6 +111,12 @@ check_prerequisites() {
 get_stack_output() {
   local stack_name="$1"
   local output_key="$2"
+
+  # If CF_STACK_NAME is set (CloudFormation mode), all outputs come from one stack
+  if [[ -n "${CF_STACK_NAME:-}" ]]; then
+    stack_name="${CF_STACK_NAME}"
+  fi
+
   aws cloudformation describe-stacks \
     --stack-name "${stack_name}" \
     --query "Stacks[0].Outputs[?OutputKey=='${output_key}'].OutputValue" \
@@ -207,6 +213,24 @@ create_ecr_repos() {
     fi
   done
 
+  # Helm chart repos (for CN regions)
+  local chart_repos=(
+    "charts/aws-load-balancer-controller"
+    "charts/openclaw-operator"
+  )
+
+  for repo in "${chart_repos[@]}"; do
+    if aws ecr describe-repositories --repository-names "${repo}" --region "${region}" &>/dev/null; then
+      log_info "ECR chart repo ${repo} already exists"
+    else
+      aws ecr create-repository \
+        --repository-name "${repo}" \
+        --image-scanning-configuration scanOnPush=false \
+        --region "${region}" 2>/dev/null || true
+      log_info "Created ECR chart repo: ${repo}"
+    fi
+  done
+
   # Derive ECR registry from account + region
   local account_id="${AWS_ACCOUNT_ID:-$(aws sts get-caller-identity --query Account --output text)}"
   local suffix=""
@@ -236,10 +260,17 @@ configure_kubectl() {
   log_info "kubectl configured successfully"
 }
 
+ensure_storage_class() {
+  log_info "Ensuring gp3 StorageClass exists..."
+
+  kubectl apply -f "${REPO_ROOT}/k8s-platform/storage/storageclass.yaml"
+
+  log_info "StorageClass gp3 ready"
+}
+
 install_alb_controller() {
   log_info "Installing AWS Load Balancer Controller..."
 
-  # Check if already installed
   if helm list -n kube-system | grep -q aws-load-balancer-controller; then
     log_info "AWS Load Balancer Controller already installed, skipping"
     return
@@ -249,11 +280,6 @@ install_alb_controller() {
   local vpc_id=$(get_stack_output "${STACK_PREFIX}-vpc" "VpcId")
   local region="${AWS_REGION}"
 
-  # Add EKS chart repo
-  helm repo add eks https://aws.github.io/eks-charts
-  helm repo update
-
-  # Build helm args
   local helm_args=(
     --set clusterName="${cluster_name}"
     --set serviceAccount.create=true
@@ -261,7 +287,13 @@ install_alb_controller() {
     --set vpcId="${vpc_id}"
   )
 
-  # In CN regions, use mirrored ALB controller image from ECR
+  # Configure IRSA: ALB Controller needs its own IAM role, not the node role
+  local alb_role_arn=$(get_stack_output "${STACK_PREFIX}-iam" "ALBControllerRoleArn")
+  if [[ -n "${alb_role_arn}" ]]; then
+    helm_args+=(--set "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn=${alb_role_arn}")
+    log_info "Using IRSA role for ALB Controller: ${alb_role_arn}"
+  fi
+
   if [[ -n "${ALB_CONTROLLER_IMAGE:-}" ]]; then
     helm_args+=(--set "image.repository=${ECR_REGISTRY}/${ALB_CONTROLLER_IMAGE}")
     if [[ -n "${ALB_CONTROLLER_TAG:-}" ]]; then
@@ -270,10 +302,34 @@ install_alb_controller() {
     log_info "Using mirrored ALB controller image: ${ECR_REGISTRY}/${ALB_CONTROLLER_IMAGE}:${ALB_CONTROLLER_TAG:-latest}"
   fi
 
-  # Install ALB controller
+  # Login to ECR for Helm OCI
+  aws ecr get-login-password --region "${region}" | helm registry login --username AWS --password-stdin "${ECR_REGISTRY}"
+
+  # Use mirrored chart from CN ECR if available, otherwise try upstream sources
+  local alb_chart_version="${ALB_CONTROLLER_CHART_VERSION:-3.2.1}"
+  local chart_ref="oci://${ECR_REGISTRY}/charts/aws-load-balancer-controller"
+
+  if helm install aws-load-balancer-controller "${chart_ref}" \
+    -n kube-system --version "${alb_chart_version}" \
+    "${helm_args[@]}" 2>/dev/null; then
+    log_info "AWS Load Balancer Controller installed (from CN ECR)"
+    return
+  fi
+
+  log_warn "CN ECR chart not found, trying public.ecr.aws..."
+  if helm install aws-load-balancer-controller \
+    oci://public.ecr.aws/eks/aws-load-balancer-controller \
+    -n kube-system --version "${alb_chart_version}" \
+    "${helm_args[@]}" 2>/dev/null; then
+    log_info "AWS Load Balancer Controller installed (from public ECR)"
+    return
+  fi
+
+  log_warn "OCI sources failed, trying GitHub Helm repo..."
+  helm repo add eks https://aws.github.io/eks-charts
+  helm repo update
   helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
-    -n kube-system \
-    "${helm_args[@]}"
+    -n kube-system "${helm_args[@]}"
 
   log_info "AWS Load Balancer Controller installed"
 }
@@ -287,7 +343,6 @@ install_openclaw_operator() {
     --set crds.install=true
   )
 
-  # In CN regions, use mirrored operator image from ECR
   if [[ -n "${OPERATOR_IMAGE_REPO:-}" ]]; then
     helm_set_args+=(
       --set "image.repository=${ECR_REGISTRY}/${OPERATOR_IMAGE_REPO}"
@@ -296,22 +351,32 @@ install_openclaw_operator() {
     log_info "Using mirrored operator image: ${ECR_REGISTRY}/${OPERATOR_IMAGE_REPO}:v${operator_version}"
   fi
 
-  # Check if already installed
+  local action="install"
   if helm list -n openclaw-operator-system | grep -q openclaw-operator; then
     log_info "openclaw-operator already installed, upgrading..."
-    helm upgrade openclaw-operator \
-      oci://ghcr.io/openclaw-rocks/charts/openclaw-operator \
-      --namespace openclaw-operator-system \
-      --version "${operator_version}" \
-      "${helm_set_args[@]}"
-  else
-    helm install openclaw-operator \
-      oci://ghcr.io/openclaw-rocks/charts/openclaw-operator \
-      --namespace openclaw-operator-system \
-      --create-namespace \
-      --version "${operator_version}" \
-      "${helm_set_args[@]}"
+    action="upgrade"
   fi
+
+  # Login to ECR for Helm OCI
+  local region="${AWS_REGION}"
+  aws ecr get-login-password --region "${region}" | helm registry login --username AWS --password-stdin "${ECR_REGISTRY}" 2>/dev/null || true
+
+  # Try mirrored chart from CN ECR first
+  local chart_ref="oci://${ECR_REGISTRY}/charts/openclaw-operator"
+  if helm ${action} openclaw-operator "${chart_ref}" \
+    --namespace openclaw-operator-system --create-namespace \
+    --version "${operator_version}" \
+    "${helm_set_args[@]}" 2>/dev/null; then
+    log_info "openclaw-operator v${operator_version} installed (from CN ECR)"
+    return
+  fi
+
+  log_warn "CN ECR chart not found, trying ghcr.io..."
+  helm ${action} openclaw-operator \
+    oci://ghcr.io/openclaw-rocks/charts/openclaw-operator \
+    --namespace openclaw-operator-system --create-namespace \
+    --version "${operator_version}" \
+    "${helm_set_args[@]}"
 
   log_info "openclaw-operator v${operator_version} installed"
 }
@@ -336,12 +401,21 @@ create_platform_secret() {
     log_error "Required variables not set: ${missing[*]}. Please configure them in .env"
   fi
 
-  # Auto-populate from CDK outputs
+  # Auto-populate from CDK/CF outputs
   local db_secret_arn=$(get_stack_output "${STACK_PREFIX}-rds" "RDSSecretArn")
   local db_endpoint=$(get_stack_output "${STACK_PREFIX}-rds" "RDSEndpoint")
   local db_port=$(get_stack_output "${STACK_PREFIX}-rds" "RDSPort")
   local db_name=$(get_stack_output "${STACK_PREFIX}-rds" "DbName")
   local queue_url=$(get_stack_output "${STACK_PREFIX}-sqs" "UsageQueueUrl")
+
+  # CF mode: SQS output key is different
+  if [[ -z "${queue_url}" ]]; then
+    queue_url=$(get_stack_output "${STACK_PREFIX}-sqs" "SQSQueueUrl")
+  fi
+
+  # CF mode: port and db_name may not be in outputs, use defaults
+  [[ -z "${db_port}" ]] && db_port="5432"
+  [[ -z "${db_name}" ]] && db_name="openclawsaas"
 
   # Read metrics-exporter version from VERSION file if not set
   if [[ -z "${METRICS_EXPORTER_TAG:-}" ]]; then
@@ -409,6 +483,20 @@ deploy_platform_api() {
 
   # Apply K8s manifests with substitution
   export PLATFORM_IMAGE="${platform_image}"
+  export ACM_CERT_ARN="${ACM_CERT_ARN:-none}"
+  export DOMAIN_NAME="${DOMAIN_NAME:-*}"
+
+  # NLB configuration: use LoadBalancer type if NLB SG is available, otherwise ClusterIP
+  local nlb_sg=$(get_stack_output "${STACK_PREFIX}-eks" "PlatformNLBSecurityGroupId")
+  if [[ -n "${nlb_sg}" ]]; then
+    export SERVICE_TYPE="LoadBalancer"
+    export NLB_SECURITY_GROUP_ID="${nlb_sg}"
+    log_info "Using NLB with pre-created SG: ${nlb_sg}"
+  else
+    export SERVICE_TYPE="${SERVICE_TYPE:-ClusterIP}"
+    export NLB_SECURITY_GROUP_ID=""
+    log_info "Using service type: ${SERVICE_TYPE}"
+  fi
 
   cd "${REPO_ROOT}/k8s/platform"
   bash apply.sh
@@ -436,17 +524,27 @@ deploy_billing_consumer() {
 verify_deployment() {
   log_info "Verifying deployment..."
 
-  local pod_name=$(kubectl get pod -l app=platform-api -n openclaw-platform -o jsonpath='{.items[0].metadata.name}')
+  local pod_name=$(kubectl get pod -l app=platform-api -n openclaw-platform -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
 
-  log_info "Platform API pod: ${pod_name}"
-  kubectl get pod -n openclaw-platform "${pod_name}"
-
-  local ingress_host=$(kubectl get ingress platform-ingress -n openclaw-platform -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || echo "")
-
-  if [[ -n "${ingress_host}" ]]; then
-    log_info "Platform API accessible at: https://${ingress_host}"
+  if [[ -z "${pod_name}" ]]; then
+    log_warn "No platform-api pod found yet"
   else
-    log_warn "Ingress not yet ready, check with: kubectl get ingress -n openclaw-platform"
+    log_info "Platform API pod: ${pod_name}"
+    kubectl get pod -n openclaw-platform "${pod_name}"
+  fi
+
+  # Check for NLB endpoint
+  local nlb_host=$(kubectl get svc platform-api -n openclaw-platform -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || echo "")
+
+  if [[ -n "${nlb_host}" ]]; then
+    log_info "Platform API accessible at: http://${nlb_host}:8890"
+  else
+    local ingress_host=$(kubectl get ingress platform-ingress -n openclaw-platform -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || echo "")
+    if [[ -n "${ingress_host}" ]]; then
+      log_info "Platform API accessible at: https://${ingress_host}"
+    else
+      log_warn "No external endpoint yet. Use: kubectl port-forward -n openclaw-platform svc/platform-api 8890:8890"
+    fi
   fi
 
   log_info "Deployment verified!"
@@ -479,6 +577,7 @@ main() {
 
   if [[ "${SKIP_K8S}" == "false" ]]; then
     configure_kubectl
+    ensure_storage_class
     install_alb_controller
     install_openclaw_operator
     create_platform_secret
