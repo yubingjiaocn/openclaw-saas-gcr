@@ -23,7 +23,7 @@
     "vpc_cidr": "172.31.0.0/16",
     "vpc_max_azs": 3,
 
-    "db_instance_class": "db.t4g.medium",
+    "db_instance_class": "t4g.medium",
     "db_name": "openclawsaas",
     "db_allocated_storage": 50,
     "db_max_allocated_storage": 200,

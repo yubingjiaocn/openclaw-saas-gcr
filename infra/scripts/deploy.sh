@@ -128,6 +128,16 @@ deploy_cdk() {
 
   cd "${REPO_ROOT}/cdk"
 
+  # Activate virtual environment (create if missing)
+  if [[ ! -d ".venv" ]]; then
+    log_info "Creating Python virtual environment..."
+    python3 -m venv .venv
+    source .venv/bin/activate
+    pip install -q -r requirements.txt
+  else
+    source .venv/bin/activate
+  fi
+
   # Get project name and environment from cdk.json
   PROJECT_NAME=$(jq -r '.context.project_name' cdk.json)
   ENVIRONMENT=$(jq -r '.context.environment' cdk.json)
@@ -249,9 +259,30 @@ configure_kubectl() {
     log_error "Could not find EKS cluster name in stack outputs"
   fi
 
-  # No --role-arn needed: CDK creates an Access Entry for the deployer identity
   log_info "Updating kubeconfig for cluster: ${cluster_name}"
   aws eks update-kubeconfig --name "${cluster_name}" --region "${AWS_REGION}"
+
+  # Ensure current identity has cluster access (idempotent)
+  local caller_arn=$(aws sts get-caller-identity --query 'Arn' --output text 2>/dev/null || echo "")
+  if [[ -n "${caller_arn}" ]]; then
+    # For assumed-role, convert to role ARN; for IAM user, use as-is
+    local principal_arn="${caller_arn}"
+    if [[ "${caller_arn}" == *":assumed-role/"* ]]; then
+      principal_arn=$(echo "${caller_arn}" | sed 's|:assumed-role/|:role/|; s|/i-[^/]*$||; s|/[^/]*$||')
+    fi
+    log_info "Ensuring EKS access for: ${principal_arn}"
+    aws eks create-access-entry \
+      --cluster-name "${cluster_name}" \
+      --principal-arn "${principal_arn}" \
+      --type STANDARD \
+      --region "${AWS_REGION}" 2>/dev/null || true
+    aws eks associate-access-policy \
+      --cluster-name "${cluster_name}" \
+      --principal-arn "${principal_arn}" \
+      --policy-arn "arn:${AWS_PARTITION:-aws}:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy" \
+      --access-scope type=cluster \
+      --region "${AWS_REGION}" 2>/dev/null || true
+  fi
 
   # Wait for cluster to be ready
   log_info "Waiting for nodes to be ready..."
@@ -270,11 +301,6 @@ ensure_storage_class() {
 
 install_alb_controller() {
   log_info "Installing AWS Load Balancer Controller..."
-
-  if helm list -n kube-system | grep -q aws-load-balancer-controller; then
-    log_info "AWS Load Balancer Controller already installed, skipping"
-    return
-  fi
 
   local cluster_name=$(get_stack_output "${STACK_PREFIX}-eks" "ClusterName")
   local vpc_id=$(get_stack_output "${STACK_PREFIX}-vpc" "VpcId")
@@ -309,7 +335,7 @@ install_alb_controller() {
   local alb_chart_version="${ALB_CONTROLLER_CHART_VERSION:-3.2.1}"
   local chart_ref="oci://${ECR_REGISTRY}/charts/aws-load-balancer-controller"
 
-  if helm install aws-load-balancer-controller "${chart_ref}" \
+  if helm upgrade --install aws-load-balancer-controller "${chart_ref}" \
     -n kube-system --version "${alb_chart_version}" \
     "${helm_args[@]}" 2>/dev/null; then
     log_info "AWS Load Balancer Controller installed (from CN ECR)"
@@ -317,7 +343,7 @@ install_alb_controller() {
   fi
 
   log_warn "CN ECR chart not found, trying public.ecr.aws..."
-  if helm install aws-load-balancer-controller \
+  if helm upgrade --install aws-load-balancer-controller \
     oci://public.ecr.aws/eks/aws-load-balancer-controller \
     -n kube-system --version "${alb_chart_version}" \
     "${helm_args[@]}" 2>/dev/null; then
@@ -326,9 +352,9 @@ install_alb_controller() {
   fi
 
   log_warn "OCI sources failed, trying GitHub Helm repo..."
-  helm repo add eks https://aws.github.io/eks-charts
+  helm repo add eks https://aws.github.io/eks-charts 2>/dev/null || true
   helm repo update
-  helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
+  helm upgrade --install aws-load-balancer-controller eks/aws-load-balancer-controller \
     -n kube-system "${helm_args[@]}"
 
   log_info "AWS Load Balancer Controller installed"
@@ -351,19 +377,13 @@ install_openclaw_operator() {
     log_info "Using mirrored operator image: ${ECR_REGISTRY}/${OPERATOR_IMAGE_REPO}:v${operator_version}"
   fi
 
-  local action="install"
-  if helm list -n openclaw-operator-system | grep -q openclaw-operator; then
-    log_info "openclaw-operator already installed, upgrading..."
-    action="upgrade"
-  fi
-
   # Login to ECR for Helm OCI
   local region="${AWS_REGION}"
   aws ecr get-login-password --region "${region}" | helm registry login --username AWS --password-stdin "${ECR_REGISTRY}" 2>/dev/null || true
 
   # Try mirrored chart from CN ECR first
   local chart_ref="oci://${ECR_REGISTRY}/charts/openclaw-operator"
-  if helm ${action} openclaw-operator "${chart_ref}" \
+  if helm upgrade --install openclaw-operator "${chart_ref}" \
     --namespace openclaw-operator-system --create-namespace \
     --version "${operator_version}" \
     "${helm_set_args[@]}" 2>/dev/null; then
@@ -372,7 +392,7 @@ install_openclaw_operator() {
   fi
 
   log_warn "CN ECR chart not found, trying ghcr.io..."
-  helm ${action} openclaw-operator \
+  helm upgrade --install openclaw-operator \
     oci://ghcr.io/openclaw-rocks/charts/openclaw-operator \
     --namespace openclaw-operator-system --create-namespace \
     --version "${operator_version}" \
@@ -486,7 +506,7 @@ deploy_platform_api() {
   export ACM_CERT_ARN="${ACM_CERT_ARN:-none}"
   export DOMAIN_NAME="${DOMAIN_NAME:-*}"
 
-  # NLB configuration: use LoadBalancer type if NLB SG is available, otherwise ClusterIP
+  # NLB configuration: use pre-created SG from CF or CDK stack
   local nlb_sg=$(get_stack_output "${STACK_PREFIX}-eks" "PlatformNLBSecurityGroupId")
   if [[ -n "${nlb_sg}" ]]; then
     export SERVICE_TYPE="LoadBalancer"
@@ -495,7 +515,7 @@ deploy_platform_api() {
   else
     export SERVICE_TYPE="${SERVICE_TYPE:-ClusterIP}"
     export NLB_SECURITY_GROUP_ID=""
-    log_info "Using service type: ${SERVICE_TYPE}"
+    log_info "Using service type: ${SERVICE_TYPE} (no NLB SG found in stack outputs)"
   fi
 
   cd "${REPO_ROOT}/k8s/platform"

@@ -6,12 +6,9 @@ metadata:
   labels:
     app: platform-api
   annotations:
-    # NLB annotations — only effective when type=LoadBalancer
     service.beta.kubernetes.io/aws-load-balancer-type: "external"
     service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: "ip"
     service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
-    # Use pre-created SG from CloudFormation (port 8890 open)
-    # If not using CF, remove this annotation and NLB will create its own SG
     service.beta.kubernetes.io/aws-load-balancer-security-groups: "${NLB_SECURITY_GROUP_ID}"
 spec:
   type: ${SERVICE_TYPE}

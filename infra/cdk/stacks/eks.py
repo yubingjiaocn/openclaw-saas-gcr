@@ -301,6 +301,23 @@ class EksStack(cdk.Stack):
         pod_id_addon.add_dependency(self.nodegroup)
 
         # =====================================================================
+        # Platform NLB Security Group (pre-created, stable across redeploys)
+        # =====================================================================
+        self.platform_nlb_sg = ec2.SecurityGroup(
+            self,
+            "PlatformNLBSecurityGroup",
+            vpc=vpc,
+            description=f"{cluster_name} Platform API NLB - pre-created for stable SG across redeploys",
+            allow_all_outbound=True,
+        )
+        self.platform_nlb_sg.add_ingress_rule(
+            peer=ec2.Peer.any_ipv4(),
+            connection=ec2.Port.tcp(8890),
+            description="Platform API HTTP from anywhere",
+        )
+        cdk.Tags.of(self.platform_nlb_sg).add("Name", f"{cluster_name}-platform-nlb-sg")
+
+        # =====================================================================
         # Outputs
         # =====================================================================
         cdk.CfnOutput(self, "ClusterName", value=cluster_name, description="EKS Cluster Name")
@@ -327,6 +344,12 @@ class EksStack(cdk.Stack):
             "NodeGroupRoleArn",
             value=self.node_role.role_arn,
             description="Node group IAM role ARN",
+        )
+        cdk.CfnOutput(
+            self,
+            "PlatformNLBSecurityGroupId",
+            value=self.platform_nlb_sg.security_group_id,
+            description="Pre-created Security Group for Platform NLB",
         )
         cdk.CfnOutput(
             self,

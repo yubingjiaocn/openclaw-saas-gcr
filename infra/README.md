@@ -109,17 +109,36 @@ cd ..
 ```
 main()
   ├── check_prerequisites
-  ├── deploy_cdk (unless --skip-cdk)
-  │     └── 自动检测 deployer IAM Role → 传入 CDK 创建 Access Entry
-  ├── create_ecr_repos          ← 创建平台 + mirror 仓库
-  ├── configure_kubectl         ← 无需 --role-arn
-  ├── install_alb_controller
-  ├── install_openclaw_operator
-  ├── create_platform_secret    ← 从 CDK 输出 + .env 组装 K8s Secret
-  ├── deploy_platform_api
-  ├── deploy_billing_consumer
-  └── verify_deployment
+  │
+  ├── deploy_cdk (--skip-cdk 跳过)
+  │     ├── 激活 Python venv（不存在则自动创建）
+  │     ├── cdk bootstrap
+  │     ├── 自动检测 deployer IAM Role → 传入 CDK 创建 Access Entry
+  │     └── cdk deploy --all（VPC, EKS, EFS, RDS, SQS, S3, IAM, Karpenter）
+  │
+  ├── create_ecr_repos（始终执行，幂等）
+  │     ├── 平台镜像仓库（platform, metrics-exporter, billing-consumer）
+  │     ├── Mirror 仓库（openclaw, nginx, uv, otel-collector, operator, alb-controller）
+  │     └── Helm chart 仓库（charts/aws-load-balancer-controller, charts/openclaw-operator）
+  │
+  └── K8s 部署 (--skip-k8s 跳过)
+        ├── configure_kubectl         ← 无需 --role-arn
+        ├── ensure_storage_class      ← apply gp3 StorageClass（EBS CSI Driver）
+        ├── install_alb_controller    ← 优先从 CN ECR 安装 chart，配置 IRSA
+        ├── install_openclaw_operator ← 优先从 CN ECR 安装 chart
+        ├── create_platform_secret    ← 从 CDK/CF 输出 + .env 组装 K8s Secret
+        ├── deploy_platform_api       ← 自动检测 NLB SG → LoadBalancer / ClusterIP
+        ├── deploy_billing_consumer
+        └── verify_deployment         ← 输出 NLB / Ingress 访问地址
 ```
+
+**参数组合：**
+
+| 命令 | 效果 |
+|------|------|
+| `deploy.sh` | 全量部署：CDK + ECR + K8s |
+| `deploy.sh --skip-cdk` | 跳过 CDK，只部署 ECR + K8s（基础设施已存在时） |
+| `deploy.sh --skip-k8s` | 只部署 CDK + ECR，不操作 K8s（镜像还没准备好时） |
 
 ## EKS 访问
 
