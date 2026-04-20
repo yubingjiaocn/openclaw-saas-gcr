@@ -315,10 +315,19 @@ deploy_platform_api() {
 
   # CloudFront prefix list for NLB SG inbound rules (LB Controller native annotation).
   # When domain is configured, restrict NLB to CloudFront only.
-  # pl-82a045eb = com.amazonaws.global.cloudfront.origin-facing (us-east-1/us-west-2)
+  # Prefix list ID is region-specific — look up dynamically.
   if [[ -n "$(get_stack_output "${STACK_PREFIX}-dns" "DomainName" 2>/dev/null || echo "")" ]]; then
-    export NLB_SG_PREFIX_LISTS="${NLB_SG_PREFIX_LISTS:-pl-82a045eb}"
-    log_info "NLB restricted to CloudFront prefix list: ${NLB_SG_PREFIX_LISTS}"
+    if [[ -z "${NLB_SG_PREFIX_LISTS:-}" ]]; then
+      NLB_SG_PREFIX_LISTS=$(aws ec2 describe-managed-prefix-lists \
+        --filters "Name=prefix-list-name,Values=com.amazonaws.global.cloudfront.origin-facing" \
+        --query "PrefixLists[0].PrefixListId" --output text 2>/dev/null || echo "")
+    fi
+    export NLB_SG_PREFIX_LISTS
+    if [[ -n "${NLB_SG_PREFIX_LISTS}" ]]; then
+      log_info "NLB restricted to CloudFront prefix list: ${NLB_SG_PREFIX_LISTS}"
+    else
+      log_warn "Could not find CloudFront prefix list for this region — NLB will be open"
+    fi
   else
     export NLB_SG_PREFIX_LISTS=""
   fi
