@@ -145,8 +145,11 @@ helm upgrade --install "$HELM_RELEASE" "$SCRIPT_DIR" \
   --set config.adminPassword="$ADMIN_PASSWORD" \
   --set config.awsPartition="$AWS_PARTITION"
 
-# Rollout restart so pods pick up Pod Identity token (needed on fresh install)
-kubectl rollout restart deployment/"$HELM_RELEASE" -n "$HELM_NAMESPACE" >/dev/null 2>&1 || true
+# Pod Identity webhook needs a few seconds to sync the new association.
+# Delete pods (not rollout restart) to force re-admission through the webhook.
+log "Restarting pods to pick up Pod Identity token..."
+sleep 5
+kubectl delete pods -n "$HELM_NAMESPACE" -l "app.kubernetes.io/instance=$HELM_RELEASE" --wait=false >/dev/null 2>&1 || true
 
 # ── 4. Wait for NLB ────────────────────────────────────────────────────────
 log "Waiting for NLB endpoint..."
