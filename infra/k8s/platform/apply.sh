@@ -4,25 +4,20 @@ set -euo pipefail
 # Apply K8s platform manifests with variable substitution.
 #
 # Required env:
-#   PLATFORM_IMAGE        - e.g. <ECR>/openclaw-saas-platform:v0.9.55
+#   PLATFORM_IMAGE        - e.g. public.ecr.aws/xxx/openclaw-saas-platform:v0.9.55
 #
 # Optional env — networking:
 #   ACM_CERT_ARN          - ACM certificate ARN (ALB mode)
 #   DOMAIN_NAME           - Custom domain for ALB ingress (ALB mode)
-#   NLB_SG_PREFIX_LISTS   - Comma-separated prefix list IDs for NLB SG inbound
-#                           (e.g. CloudFront pl-xxx). Empty = allow all.
+#   NLB_SG_PREFIX_LISTS   - Prefix list IDs for NLB SG inbound (empty = allow all)
+#
+# Optional env — billing:
+#   BILLING_IMAGE         - Billing consumer image. If set, deploys as sidecar.
 #
 # Optional env — database:
 #   DB_MODE               - "postgres" (default) or "sqlite"
 #   SQLITE_STORAGE_CLASS  - StorageClass for SQLite PVC (default: gp3)
 #   SQLITE_PVC_SIZE       - PVC size (default: 10Gi)
-#
-# Modes:
-#   ACM_CERT_ARN + DOMAIN_NAME set → ALB ingress (HTTPS)
-#   Otherwise                      → NLB service (HTTP)
-#
-#   DB_MODE=postgres → emptyDir volume (DB via DATABASE_URL in secret)
-#   DB_MODE=sqlite   → EBS PVC at /data, DATABASE_URL=sqlite+aiosqlite:////data/platform.db
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -32,7 +27,7 @@ DB_MODE="${DB_MODE:-postgres}"
 SQLITE_STORAGE_CLASS="${SQLITE_STORAGE_CLASS:-gp3}"
 SQLITE_PVC_SIZE="${SQLITE_PVC_SIZE:-10Gi}"
 
-# ── Determine networking mode ──
+# ── Determine modes ──
 if [[ -n "${ACM_CERT_ARN:-}" && -n "${DOMAIN_NAME:-}" ]]; then
   DEPLOY_MODE="alb"
   echo "==> Networking: ALB + custom domain (${DOMAIN_NAME})"
@@ -41,28 +36,17 @@ else
   echo "==> Networking: NLB (LB Controller managed)"
 fi
 echo "    Image:    ${PLATFORM_IMAGE}"
+echo "    Billing:  ${BILLING_IMAGE:-<disabled>}"
 echo "    Database: ${DB_MODE}"
 
-# ── Choose deployment manifest ──
+# ── Pick deployment manifest ──
 if [[ -n "${BILLING_IMAGE:-}" ]]; then
   DEPLOY_MANIFEST="deployment-with-billing.yaml"
 else
   DEPLOY_MANIFEST="deployment.yaml"
 fi
 
-# ── Apply base manifests ──
-for manifest in namespace.yaml rbac.yaml service.yaml "${DEPLOY_MANIFEST}"; do
-  echo "    Applying ${manifest}..."
-  envsubst < "${SCRIPT_DIR}/${manifest}" | kubectl apply -f -
-done
-
-# ALB mode: also apply ingress
-if [[ "${DEPLOY_MODE}" == "alb" ]]; then
-  echo "    Applying ingress.yaml..."
-  envsubst < "${SCRIPT_DIR}/ingress.yaml" | kubectl apply -f -
-fi
-
-# ── SQLite mode: create PVC + patch deployment ──
+# ── SQLite: create PVC before deployment ──
 if [[ "${DB_MODE}" == "sqlite" ]]; then
   echo "    Creating PVC for SQLite (${SQLITE_PVC_SIZE} on ${SQLITE_STORAGE_CLASS})..."
   cat <<EOF | kubectl apply -f -
@@ -78,14 +62,31 @@ spec:
     requests:
       storage: ${SQLITE_PVC_SIZE}
 EOF
+fi
 
-  echo "    Patching deployment for SQLite PVC..."
-  kubectl patch deployment platform-api -n openclaw-platform --type json -p '[
-    {"op":"replace","path":"/spec/template/spec/volumes/0",
-     "value":{"name":"data","persistentVolumeClaim":{"claimName":"platform-data"}}},
-    {"op":"replace","path":"/spec/template/spec/containers/0/volumeMounts/0/mountPath",
-     "value":"/data"}
-  ]'
+# ── Apply manifests ──
+# namespace + rbac + service: straight envsubst
+for manifest in namespace.yaml rbac.yaml service.yaml; do
+  echo "    Applying ${manifest}..."
+  envsubst < "${SCRIPT_DIR}/${manifest}" | kubectl apply -f -
+done
+
+# deployment: envsubst, then sqlite volume replacement if needed
+echo "    Applying ${DEPLOY_MANIFEST} (DB_MODE=${DB_MODE})..."
+if [[ "${DB_MODE}" == "sqlite" ]]; then
+  # Replace emptyDir with PVC, and /app/data with /data (SQLite path)
+  envsubst < "${SCRIPT_DIR}/${DEPLOY_MANIFEST}" | \
+    sed -e 's|emptyDir: {}|persistentVolumeClaim:\n            claimName: platform-data|' \
+        -e 's|/app/data|/data|g' | \
+    kubectl apply -f -
+else
+  envsubst < "${SCRIPT_DIR}/${DEPLOY_MANIFEST}" | kubectl apply -f -
+fi
+
+# ALB mode: also apply ingress
+if [[ "${DEPLOY_MODE}" == "alb" ]]; then
+  echo "    Applying ingress.yaml..."
+  envsubst < "${SCRIPT_DIR}/ingress.yaml" | kubectl apply -f -
 fi
 
 echo "==> Platform manifests applied successfully!"
