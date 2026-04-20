@@ -1,18 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Apply K8s platform manifests with variable substitution.
+# Apply K8s platform manifests (raw kubectl, no Helm).
+# For production use, prefer the Helm chart at infra/helm/openclaw-platform/.
 #
 # Required env:
-#   PLATFORM_IMAGE        - e.g. public.ecr.aws/xxx/openclaw-saas-platform:v0.9.55
+#   PLATFORM_IMAGE        - e.g. public.ecr.aws/bingjiao/openclaw-saas-platform:v0.9.55
 #
 # Optional env — networking:
 #   ACM_CERT_ARN          - ACM certificate ARN (ALB mode)
-#   DOMAIN_NAME           - Custom domain for ALB ingress (ALB mode)
-#   NLB_SG_PREFIX_LISTS   - Prefix list IDs for NLB SG inbound (empty = allow all)
-#
-# Optional env — billing:
-#   BILLING_IMAGE         - Billing consumer image. If set, deploys as sidecar.
+#   DOMAIN_NAME           - Custom domain (ALB mode)
+#   NLB_SG_PREFIX_LISTS   - Prefix list IDs for NLB SG (empty = allow all)
 #
 # Optional env — database:
 #   DB_MODE               - "postgres" (default) or "sqlite"
@@ -27,7 +25,6 @@ DB_MODE="${DB_MODE:-postgres}"
 SQLITE_STORAGE_CLASS="${SQLITE_STORAGE_CLASS:-gp3}"
 SQLITE_PVC_SIZE="${SQLITE_PVC_SIZE:-10Gi}"
 
-# ── Determine modes ──
 if [[ -n "${ACM_CERT_ARN:-}" && -n "${DOMAIN_NAME:-}" ]]; then
   DEPLOY_MODE="alb"
   echo "==> Networking: ALB + custom domain (${DOMAIN_NAME})"
@@ -36,20 +33,12 @@ else
   echo "==> Networking: NLB (LB Controller managed)"
 fi
 echo "    Image:    ${PLATFORM_IMAGE}"
-echo "    Billing:  ${BILLING_IMAGE:-<disabled>}"
 echo "    Database: ${DB_MODE}"
 
-# ── Pick deployment manifest ──
-if [[ -n "${BILLING_IMAGE:-}" ]]; then
-  DEPLOY_MANIFEST="deployment-with-billing.yaml"
-else
-  DEPLOY_MANIFEST="deployment.yaml"
-fi
-
-# ── SQLite: create PVC before deployment ──
+# SQLite: create PVC before deployment
 if [[ "${DB_MODE}" == "sqlite" ]]; then
   echo "    Creating PVC for SQLite (${SQLITE_PVC_SIZE} on ${SQLITE_STORAGE_CLASS})..."
-  cat <<EOF | kubectl apply -f -
+  cat <<PVCEOF | kubectl apply -f -
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -61,18 +50,16 @@ spec:
   resources:
     requests:
       storage: ${SQLITE_PVC_SIZE}
-EOF
+PVCEOF
 fi
 
-# ── Apply manifests ──
-# namespace + rbac + service: straight envsubst
+# Apply namespace + rbac + service
 for manifest in namespace.yaml rbac.yaml; do
   echo "    Applying ${manifest}..."
   envsubst < "${SCRIPT_DIR}/${manifest}" | kubectl apply -f -
 done
 
-# service.yaml: strip the prefix-list annotation when empty (empty value
-# causes LB Controller to create an SG with no inbound rules → blocked)
+# service.yaml: strip prefix-list annotation when empty
 echo "    Applying service.yaml..."
 if [[ -z "${NLB_SG_PREFIX_LISTS:-}" ]]; then
   envsubst < "${SCRIPT_DIR}/service.yaml" | \
@@ -82,19 +69,17 @@ else
   envsubst < "${SCRIPT_DIR}/service.yaml" | kubectl apply -f -
 fi
 
-# deployment: envsubst, then sqlite volume replacement if needed
-echo "    Applying ${DEPLOY_MANIFEST} (DB_MODE=${DB_MODE})..."
+# deployment.yaml: envsubst + sqlite volume replacement
+echo "    Applying deployment.yaml (DB_MODE=${DB_MODE})..."
 if [[ "${DB_MODE}" == "sqlite" ]]; then
-  # Replace emptyDir with PVC, and /app/data with /data (SQLite path)
-  envsubst < "${SCRIPT_DIR}/${DEPLOY_MANIFEST}" | \
+  envsubst < "${SCRIPT_DIR}/deployment.yaml" | \
     sed -e 's|emptyDir: {}|persistentVolumeClaim:\n            claimName: platform-data|' \
-        -e 's|/app/data|/data|g' | \
+        -e 's|mountPath: /app/data|mountPath: /data|g' | \
     kubectl apply -f -
 else
-  envsubst < "${SCRIPT_DIR}/${DEPLOY_MANIFEST}" | kubectl apply -f -
+  envsubst < "${SCRIPT_DIR}/deployment.yaml" | kubectl apply -f -
 fi
 
-# ALB mode: also apply ingress
 if [[ "${DEPLOY_MODE}" == "alb" ]]; then
   echo "    Applying ingress.yaml..."
   envsubst < "${SCRIPT_DIR}/ingress.yaml" | kubectl apply -f -
@@ -102,37 +87,21 @@ fi
 
 echo "==> Platform manifests applied successfully!"
 
-# ── Wait for external endpoint ──
-echo ""
+# Wait for endpoint
 if [[ "${DEPLOY_MODE}" == "nlb" ]]; then
   echo "==> Waiting for NLB endpoint..."
-  LB_DNS=""
   for i in $(seq 1 36); do
     LB_DNS=$(kubectl get svc platform-api -n openclaw-platform \
       -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
-    [[ -n "$LB_DNS" ]] && break
-    echo "    Waiting... (${i}/36)"
-    sleep 5
+    [[ -n "$LB_DNS" ]] && echo "    Endpoint: http://${LB_DNS}" && break
+    echo "    Waiting... (${i}/36)"; sleep 5
   done
-  RESOURCE_CMD="kubectl get svc platform-api -n openclaw-platform"
 else
   echo "==> Waiting for ALB endpoint..."
-  LB_DNS=""
   for i in $(seq 1 36); do
     LB_DNS=$(kubectl get ingress platform-ingress -n openclaw-platform \
       -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
-    [[ -n "$LB_DNS" ]] && break
-    echo "    Waiting... (${i}/36)"
-    sleep 5
+    [[ -n "$LB_DNS" ]] && echo "    Endpoint: http://${LB_DNS}" && break
+    echo "    Waiting... (${i}/36)"; sleep 5
   done
-  RESOURCE_CMD="kubectl get ingress platform-ingress -n openclaw-platform"
-fi
-
-if [[ -n "${LB_DNS}" ]]; then
-  echo "    Endpoint: http://${LB_DNS}"
-  echo ""
-  echo "    Verify:   curl -s http://${LB_DNS}/health"
-else
-  echo "    WARNING: Endpoint not available yet."
-  echo "    Check:   ${RESOURCE_CMD}"
 fi
