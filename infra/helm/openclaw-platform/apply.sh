@@ -134,6 +134,8 @@ fi
 
 # ── 3. Helm install/upgrade ────────────────────────────────────────────────
 log "Helm install/upgrade $HELM_RELEASE → $HELM_NAMESPACE..."
+# create-namespace first so Pod Identity Association can reference it
+kubectl create namespace "$HELM_NAMESPACE" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 helm upgrade --install "$HELM_RELEASE" "$SCRIPT_DIR" \
   --namespace "$HELM_NAMESPACE" --create-namespace \
   --set config.sqsQueueUrl="$SQS_QUEUE_URL" \
@@ -142,6 +144,9 @@ helm upgrade --install "$HELM_RELEASE" "$SCRIPT_DIR" \
   --set config.adminEmail="$ADMIN_EMAIL" \
   --set config.adminPassword="$ADMIN_PASSWORD" \
   --set config.awsPartition="$AWS_PARTITION"
+
+# Rollout restart so pods pick up Pod Identity token (needed on fresh install)
+kubectl rollout restart deployment/"$HELM_RELEASE" -n "$HELM_NAMESPACE" >/dev/null 2>&1 || true
 
 # ── 4. Wait for NLB ────────────────────────────────────────────────────────
 log "Waiting for NLB endpoint..."
