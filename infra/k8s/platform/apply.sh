@@ -4,33 +4,46 @@ set -euo pipefail
 # Apply K8s platform manifests with variable substitution.
 #
 # Required env:
-#   PLATFORM_IMAGE   - e.g. <ECR>/openclaw-saas-platform:v0.9.55
+#   PLATFORM_IMAGE        - e.g. <ECR>/openclaw-saas-platform:v0.9.55
 #
-# Optional env (ALB mode):
-#   ACM_CERT_ARN     - ACM certificate ARN
-#   DOMAIN_NAME      - Custom domain for ALB ingress
+# Optional env — networking:
+#   ACM_CERT_ARN          - ACM certificate ARN (ALB mode)
+#   DOMAIN_NAME           - Custom domain for ALB ingress (ALB mode)
+#   NLB_SG_PREFIX_LISTS   - Comma-separated prefix list IDs for NLB SG inbound
+#                           (e.g. CloudFront pl-xxx). Empty = allow all.
 #
-# If ACM_CERT_ARN + DOMAIN_NAME are set → ALB mode (applies ingress.yaml).
-# Otherwise → NLB mode (service.yaml creates an internet-facing NLB via
-# AWS Load Balancer Controller with loadBalancerClass).
+# Optional env — database:
+#   DB_MODE               - "postgres" (default) or "sqlite"
+#   SQLITE_STORAGE_CLASS  - StorageClass for SQLite PVC (default: gp3)
+#   SQLITE_PVC_SIZE       - PVC size (default: 10Gi)
+#
+# Modes:
+#   ACM_CERT_ARN + DOMAIN_NAME set → ALB ingress (HTTPS)
+#   Otherwise                      → NLB service (HTTP)
+#
+#   DB_MODE=postgres → emptyDir volume (DB via DATABASE_URL in secret)
+#   DB_MODE=sqlite   → EBS PVC at /data, DATABASE_URL=sqlite+aiosqlite:////data/platform.db
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 : "${PLATFORM_IMAGE:?PLATFORM_IMAGE is required}"
 
-# Determine deployment mode
+DB_MODE="${DB_MODE:-postgres}"
+SQLITE_STORAGE_CLASS="${SQLITE_STORAGE_CLASS:-gp3}"
+SQLITE_PVC_SIZE="${SQLITE_PVC_SIZE:-10Gi}"
+
+# ── Determine networking mode ──
 if [[ -n "${ACM_CERT_ARN:-}" && -n "${DOMAIN_NAME:-}" ]]; then
   DEPLOY_MODE="alb"
-  echo "==> Deployment mode: ALB + custom domain"
-  echo "    Domain:   ${DOMAIN_NAME}"
-  echo "    ACM ARN:  ${ACM_CERT_ARN}"
+  echo "==> Networking: ALB + custom domain (${DOMAIN_NAME})"
 else
   DEPLOY_MODE="nlb"
-  echo "==> Deployment mode: NLB (AWS LB Controller managed)"
+  echo "==> Networking: NLB (LB Controller managed)"
 fi
 echo "    Image:    ${PLATFORM_IMAGE}"
+echo "    Database: ${DB_MODE}"
 
-# Apply base manifests (always)
+# ── Apply base manifests ──
 for manifest in namespace.yaml rbac.yaml service.yaml deployment.yaml; do
   echo "    Applying ${manifest}..."
   envsubst < "${SCRIPT_DIR}/${manifest}" | kubectl apply -f -
@@ -40,6 +53,32 @@ done
 if [[ "${DEPLOY_MODE}" == "alb" ]]; then
   echo "    Applying ingress.yaml..."
   envsubst < "${SCRIPT_DIR}/ingress.yaml" | kubectl apply -f -
+fi
+
+# ── SQLite mode: create PVC + patch deployment ──
+if [[ "${DB_MODE}" == "sqlite" ]]; then
+  echo "    Creating PVC for SQLite (${SQLITE_PVC_SIZE} on ${SQLITE_STORAGE_CLASS})..."
+  cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: platform-data
+  namespace: openclaw-platform
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: "${SQLITE_STORAGE_CLASS}"
+  resources:
+    requests:
+      storage: ${SQLITE_PVC_SIZE}
+EOF
+
+  echo "    Patching deployment for SQLite PVC..."
+  kubectl patch deployment platform-api -n openclaw-platform --type json -p '[
+    {"op":"replace","path":"/spec/template/spec/volumes/0",
+     "value":{"name":"data","persistentVolumeClaim":{"claimName":"platform-data"}}},
+    {"op":"replace","path":"/spec/template/spec/containers/0/volumeMounts/0/mountPath",
+     "value":"/data"}
+  ]'
 fi
 
 echo "==> Platform manifests applied successfully!"
