@@ -17,7 +17,7 @@ set -euo pipefail
 
 CLUSTER_NAME="${CLUSTER_NAME:-openclaw-workshop}"
 ADMIN_EMAIL="${ADMIN_EMAIL:-admin@workshop.openclaw.dev}"
-ADMIN_PASSWORD="${ADMIN_PASSWORD:-Workshop2026!Admin}"
+ADMIN_PASSWORD="${ADMIN_PASSWORD:-}"
 HELM_RELEASE="${HELM_RELEASE:-openclaw-platform}"
 HELM_NAMESPACE="${HELM_NAMESPACE:-openclaw-platform}"
 IAM_ROLE_NAME="${HELM_RELEASE}-api"
@@ -133,6 +133,13 @@ else
 fi
 
 # ── 3. Helm install/upgrade ────────────────────────────────────────────────
+# Prompt for password if not set
+if [[ -z "${ADMIN_PASSWORD}" ]]; then
+  read -rsp "Admin password (ADMIN_PASSWORD): " ADMIN_PASSWORD
+  echo
+fi
+[[ -n "$ADMIN_PASSWORD" ]] || err "ADMIN_PASSWORD is required"
+
 log "Helm install/upgrade $HELM_RELEASE → $HELM_NAMESPACE..."
 # create-namespace first so Pod Identity Association can reference it
 kubectl create namespace "$HELM_NAMESPACE" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
