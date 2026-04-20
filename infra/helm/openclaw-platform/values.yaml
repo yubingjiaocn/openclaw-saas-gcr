@@ -2,7 +2,7 @@
 
 image:
   platform: public.ecr.aws/bingjiao/openclaw-saas-platform
-  platformTag: "v0.9.59"
+  platformTag: "v0.9.55"
   billingConsumer: public.ecr.aws/bingjiao/openclaw-saas-billing-consumer
   billingConsumerTag: "v0.1.0"
   metricsExporter: public.ecr.aws/bingjiao/openclaw-saas-metrics-exporter

@@ -3,4 +3,4 @@ name: openclaw-platform
 description: OpenClaw SaaS Management Platform (API + Billing Consumer)
 type: application
 version: 0.1.0
-appVersion: "0.9.59"
+appVersion: "0.9.55"
