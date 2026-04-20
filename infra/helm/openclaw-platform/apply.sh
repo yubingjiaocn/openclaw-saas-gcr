@@ -72,12 +72,22 @@ log "Account: $AWS_ACCOUNT_ID  Region: $AWS_REGION"
 # ── 1. SQS queue ───────────────────────────────────────────────────────────
 QUEUE_NAME="${CLUSTER_NAME}-ps-usage-events"
 log "SQS queue: $QUEUE_NAME"
-SQS_QUEUE_URL=$(aws sqs create-queue \
-  --queue-name "$QUEUE_NAME" \
-  --region "$AWS_REGION" \
-  --query QueueUrl --output text 2>/dev/null) || \
-  SQS_QUEUE_URL=$(aws sqs get-queue-url --queue-name "$QUEUE_NAME" \
-    --region "$AWS_REGION" --query QueueUrl --output text)
+SQS_QUEUE_URL=""
+for attempt in 1 2 3 4; do
+  SQS_QUEUE_URL=$(aws sqs create-queue --queue-name "$QUEUE_NAME" \
+    --region "$AWS_REGION" --query QueueUrl --output text 2>/dev/null) && break
+  ERR=$(aws sqs create-queue --queue-name "$QUEUE_NAME" \
+    --region "$AWS_REGION" --query QueueUrl --output text 2>&1 || true)
+  if echo "$ERR" | grep -q QueueDeletedRecently; then
+    warn "SQS 60s cooldown after deletion, waiting... ($attempt/3)"
+    sleep 20
+  else
+    # Queue already exists — just get the URL
+    SQS_QUEUE_URL=$(aws sqs get-queue-url --queue-name "$QUEUE_NAME" \
+      --region "$AWS_REGION" --query QueueUrl --output text) && break
+  fi
+done
+[[ -n "$SQS_QUEUE_URL" ]] || err "Failed to create/find SQS queue after retries"
 log "SQS URL: $SQS_QUEUE_URL"
 
 # ── 2. IAM Role + Pod Identity ─────────────────────────────────────────────
