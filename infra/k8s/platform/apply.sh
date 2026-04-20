@@ -66,10 +66,21 @@ fi
 
 # ── Apply manifests ──
 # namespace + rbac + service: straight envsubst
-for manifest in namespace.yaml rbac.yaml service.yaml; do
+for manifest in namespace.yaml rbac.yaml; do
   echo "    Applying ${manifest}..."
   envsubst < "${SCRIPT_DIR}/${manifest}" | kubectl apply -f -
 done
+
+# service.yaml: strip the prefix-list annotation when empty (empty value
+# causes LB Controller to create an SG with no inbound rules → blocked)
+echo "    Applying service.yaml..."
+if [[ -z "${NLB_SG_PREFIX_LISTS:-}" ]]; then
+  envsubst < "${SCRIPT_DIR}/service.yaml" | \
+    sed '/aws-load-balancer-security-group-prefix-lists/d' | \
+    kubectl apply -f -
+else
+  envsubst < "${SCRIPT_DIR}/service.yaml" | kubectl apply -f -
+fi
 
 # deployment: envsubst, then sqlite volume replacement if needed
 echo "    Applying ${DEPLOY_MANIFEST} (DB_MODE=${DB_MODE})..."
