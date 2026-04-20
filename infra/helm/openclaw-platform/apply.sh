@@ -75,8 +75,8 @@ log "SQS queue: $QUEUE_NAME"
 SQS_QUEUE_URL=$(aws sqs create-queue \
   --queue-name "$QUEUE_NAME" \
   --region "$AWS_REGION" \
-  --query QueueUrl --output text 2>/dev/null || \
-  aws sqs get-queue-url --queue-name "$QUEUE_NAME" \
+  --query QueueUrl --output text 2>/dev/null) || \
+  SQS_QUEUE_URL=$(aws sqs get-queue-url --queue-name "$QUEUE_NAME" \
     --region "$AWS_REGION" --query QueueUrl --output text)
 log "SQS URL: $SQS_QUEUE_URL"
 
