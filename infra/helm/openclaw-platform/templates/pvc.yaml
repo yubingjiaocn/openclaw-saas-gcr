@@ -1,0 +1,13 @@
+{{- if eq .Values.db.mode "sqlite" }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: platform-data
+  namespace: {{ .Release.Namespace }}
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: {{ .Values.db.sqlite.storageClass | quote }}
+  resources:
+    requests:
+      storage: {{ .Values.db.sqlite.size | quote }}
+{{- end }}

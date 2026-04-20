@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: platform-api
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: platform-api
+    app.kubernetes.io/part-of: openclaw-saas
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: platform-api
+  template:
+    metadata:
+      labels:
+        app: platform-api
+    spec:
+      serviceAccountName: platform-api
+      containers:
+        - name: api
+          image: {{ .Values.image.platform }}:{{ .Values.image.platformTag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 8000
+              name: http
+          envFrom:
+            - secretRef:
+                name: platform-api-config
+          resources: {{ toYaml .Values.resources.api | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          {{- if eq .Values.db.mode "sqlite" }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          {{- end }}
+        {{- if .Values.billing.enabled }}
+        - name: billing-consumer
+          image: {{ .Values.image.billingConsumer }}:{{ .Values.image.billingConsumerTag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: PYTHONUNBUFFERED
+              value: "1"
+          envFrom:
+            - secretRef:
+                name: platform-api-config
+          resources: {{ toYaml .Values.resources.billing | nindent 12 }}
+          {{- if eq .Values.db.mode "sqlite" }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          {{- end }}
+        {{- end }}
+      {{- if eq .Values.db.mode "sqlite" }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: platform-data
+      {{- end }}
