@@ -43,8 +43,15 @@ fi
 echo "    Image:    ${PLATFORM_IMAGE}"
 echo "    Database: ${DB_MODE}"
 
+# ── Choose deployment manifest ──
+if [[ -n "${BILLING_IMAGE:-}" ]]; then
+  DEPLOY_MANIFEST="deployment-with-billing.yaml"
+else
+  DEPLOY_MANIFEST="deployment.yaml"
+fi
+
 # ── Apply base manifests ──
-for manifest in namespace.yaml rbac.yaml service.yaml deployment.yaml; do
+for manifest in namespace.yaml rbac.yaml service.yaml "${DEPLOY_MANIFEST}"; do
   echo "    Applying ${manifest}..."
   envsubst < "${SCRIPT_DIR}/${manifest}" | kubectl apply -f -
 done
