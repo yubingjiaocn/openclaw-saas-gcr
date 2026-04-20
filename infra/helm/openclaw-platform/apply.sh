@@ -33,12 +33,12 @@ if [[ "${1:-}" == "--uninstall" ]]; then
   log "Uninstalling $HELM_RELEASE..."
   helm uninstall "$HELM_RELEASE" -n "$HELM_NAMESPACE" 2>/dev/null || true
   kubectl delete ns "$HELM_NAMESPACE" --ignore-not-found
-  kubectl delete clusterrole openclaw-platform-api --ignore-not-found
-  kubectl delete clusterrolebinding openclaw-platform-api --ignore-not-found
+  kubectl delete clusterrole "$HELM_RELEASE" --ignore-not-found
+  kubectl delete clusterrolebinding "$HELM_RELEASE" --ignore-not-found
 
   log "Removing Pod Identity Association..."
   ASSOC_ID=$(aws eks list-pod-identity-associations --cluster-name "$CLUSTER_NAME" \
-    --namespace "$HELM_NAMESPACE" --service-account platform-api \
+    --namespace "$HELM_NAMESPACE" --service-account "$HELM_RELEASE" \
     --region "$AWS_REGION" --query 'associations[0].associationId' --output text 2>/dev/null || echo "")
   [[ -n "$ASSOC_ID" && "$ASSOC_ID" != "None" ]] && \
     aws eks delete-pod-identity-association --cluster-name "$CLUSTER_NAME" \
@@ -118,13 +118,13 @@ log "SQS policy attached"
 
 log "Pod Identity Association..."
 ASSOC_ID=$(aws eks list-pod-identity-associations --cluster-name "$CLUSTER_NAME" \
-  --namespace "$HELM_NAMESPACE" --service-account platform-api \
+  --namespace "$HELM_NAMESPACE" --service-account "$HELM_RELEASE" \
   --region "$AWS_REGION" --query 'associations[0].associationId' --output text 2>/dev/null || echo "")
 if [[ -z "$ASSOC_ID" || "$ASSOC_ID" == "None" ]]; then
   aws eks create-pod-identity-association \
     --cluster-name "$CLUSTER_NAME" \
     --namespace "$HELM_NAMESPACE" \
-    --service-account platform-api \
+    --service-account "$HELM_RELEASE" \
     --role-arn "$ROLE_ARN" \
     --region "$AWS_REGION" >/dev/null
   log "Pod Identity Association created"
@@ -147,7 +147,7 @@ helm upgrade --install "$HELM_RELEASE" "$SCRIPT_DIR" \
 log "Waiting for NLB endpoint..."
 NLB_HOST=""
 for i in $(seq 1 36); do
-  NLB_HOST=$(kubectl get svc platform-api -n "$HELM_NAMESPACE" \
+  NLB_HOST=$(kubectl get svc "$HELM_RELEASE" -n "$HELM_NAMESPACE" \
     -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
   [[ -n "$NLB_HOST" ]] && break
   echo "    Waiting... ($i/36)"
@@ -171,5 +171,5 @@ if [[ -n "$NLB_HOST" ]]; then
   echo ""
   echo "export PROVISIONING_SERVICE_URL=http://$NLB_HOST"
 else
-  warn "NLB not ready yet. Check: kubectl get svc platform-api -n $HELM_NAMESPACE"
+  warn "NLB not ready yet. Check: kubectl get svc "$HELM_RELEASE" -n $HELM_NAMESPACE"
 fi

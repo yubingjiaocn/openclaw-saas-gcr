@@ -2,14 +2,14 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: platform-api
+  name: {{ include "openclaw-platform.fullname" . }}
   namespace: {{ .Release.Namespace }}
   labels:
-    app: platform-api
+    {{- include "openclaw-platform.labels" . | nindent 4 }}
 spec:
   type: ClusterIP
   selector:
-    app: platform-api
+    {{- include "openclaw-platform.selectorLabels" . | nindent 4 }}
   ports:
     - port: 80
       targetPort: 8000
@@ -19,26 +19,28 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: platform-ingress
+  name: {{ include "openclaw-platform.fullname" . }}
   namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "openclaw-platform.labels" . | nindent 4 }}
   annotations:
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
     alb.ingress.kubernetes.io/ssl-redirect: "443"
-    alb.ingress.kubernetes.io/certificate-arn: {{ required "ingress.certArn is required when ingress.enabled=true" .Values.ingress.certArn | quote }}
+    alb.ingress.kubernetes.io/certificate-arn: {{ required "ingress.certArn required" .Values.ingress.certArn | quote }}
     alb.ingress.kubernetes.io/healthcheck-path: /health
 spec:
   ingressClassName: alb
   rules:
-    - host: {{ required "ingress.host is required when ingress.enabled=true" .Values.ingress.host | quote }}
+    - host: {{ required "ingress.host required" .Values.ingress.host | quote }}
       http:
         paths:
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: platform-api
+                name: {{ include "openclaw-platform.fullname" . }}
                 port:
                   number: 80
 {{- end }}

@@ -1,22 +1,21 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: platform-api
+  name: {{ include "openclaw-platform.fullname" . }}
   namespace: {{ .Release.Namespace }}
   labels:
-    app: platform-api
-    app.kubernetes.io/part-of: openclaw-saas
+    {{- include "openclaw-platform.labels" . | nindent 4 }}
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: platform-api
+      {{- include "openclaw-platform.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        app: platform-api
+        {{- include "openclaw-platform.selectorLabels" . | nindent 8 }}
     spec:
-      serviceAccountName: platform-api
+      serviceAccountName: {{ include "openclaw-platform.serviceAccountName" . }}
       containers:
         - name: api
           image: {{ .Values.image.platform }}:{{ .Values.image.platformTag }}
@@ -26,8 +25,8 @@ spec:
               name: http
           envFrom:
             - secretRef:
-                name: platform-api-config
-          resources: {{ toYaml .Values.resources.api | nindent 12 }}
+                name: {{ include "openclaw-platform.fullname" . }}
+          resources: {{- toYaml .Values.resources.api | nindent 12 }}
           readinessProbe:
             httpGet:
               path: /health
@@ -54,8 +53,8 @@ spec:
               value: "1"
           envFrom:
             - secretRef:
-                name: platform-api-config
-          resources: {{ toYaml .Values.resources.billing | nindent 12 }}
+                name: {{ include "openclaw-platform.fullname" . }}
+          resources: {{- toYaml .Values.resources.billing | nindent 12 }}
           {{- if eq .Values.db.mode "sqlite" }}
           volumeMounts:
             - name: data
@@ -66,5 +65,5 @@ spec:
       volumes:
         - name: data
           persistentVolumeClaim:
-            claimName: platform-data
+            claimName: {{ include "openclaw-platform.fullname" . }}-data
       {{- end }}
