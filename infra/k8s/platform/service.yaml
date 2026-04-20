@@ -12,7 +12,11 @@ metadata:
     service.beta.kubernetes.io/aws-load-balancer-type: "external"
     service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
     service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: "ip"
-    service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+    service.beta.kubernetes.io/aws-load-balancer-attributes: "load_balancing.cross_zone.enabled=true"
+    # Security: restrict NLB inbound to CloudFront prefix list.
+    # LB Controller creates a managed SG with these prefix lists as inbound rules.
+    # Set to empty to allow all (e.g. workshop/dev). Override via envsubst.
+    service.beta.kubernetes.io/aws-load-balancer-security-group-prefix-lists: "${NLB_SG_PREFIX_LISTS}"
     # Health check
     service.beta.kubernetes.io/aws-load-balancer-healthcheck-path: "/health"
     service.beta.kubernetes.io/aws-load-balancer-healthcheck-protocol: "HTTP"

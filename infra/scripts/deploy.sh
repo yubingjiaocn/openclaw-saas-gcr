@@ -313,11 +313,14 @@ deploy_platform_api() {
   local acm_cert_arn=$(get_stack_output "${STACK_PREFIX}-dns" "CertificateArn" || echo "")
   local domain_name=$(get_stack_output "${STACK_PREFIX}-dns" "DomainName" || echo "")
 
-  # Get NLB Security Group ID from CDK (CloudFront prefix list restricted)
-  local nlb_sg_id=$(get_stack_output "${STACK_PREFIX}-dns" "NlbSecurityGroupId" || echo "")
-  if [[ -n "${nlb_sg_id}" ]]; then
-    export NLB_SECURITY_GROUP_ID="${nlb_sg_id}"
-    log_info "Using CDK-managed NLB Security Group: ${nlb_sg_id}"
+  # CloudFront prefix list for NLB SG inbound rules (LB Controller native annotation).
+  # When domain is configured, restrict NLB to CloudFront only.
+  # pl-82a045eb = com.amazonaws.global.cloudfront.origin-facing (us-east-1/us-west-2)
+  if [[ -n "$(get_stack_output "${STACK_PREFIX}-dns" "DomainName" 2>/dev/null || echo "")" ]]; then
+    export NLB_SG_PREFIX_LISTS="${NLB_SG_PREFIX_LISTS:-pl-82a045eb}"
+    log_info "NLB restricted to CloudFront prefix list: ${NLB_SG_PREFIX_LISTS}"
+  else
+    export NLB_SG_PREFIX_LISTS=""
   fi
 
   # Apply K8s manifests with substitution
