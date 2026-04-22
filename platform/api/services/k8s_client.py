@@ -568,38 +568,30 @@ class K8sClient:
         return {"status": "deleted", "name": agent_name}
 
     async def get_agent_gateway_info(self, tenant_name: str, agent_name: str) -> dict:
-        """Get gateway status: whether ingress is enabled in CRD and the ALB URL if ready."""
+        """Get gateway status: check if ingress exists and read its ALB hostname."""
         await self.initialize()
         namespace = f"tenant-{tenant_name}"
+        try:
+            ing = await self._networking_v1.read_namespaced_ingress(
+                name=agent_name, namespace=namespace,
+            )
+        except client.exceptions.ApiException:
+            return {"gateway_enabled": False, "gateway_url": None}
 
-        # Check CRD spec for networking.ingress.enabled
-        gateway_enabled = False
-        instance = await self.get_openclaw_instance(tenant_name, agent_name)
-        if instance:
-            ingress_spec = instance.get("spec", {}).get("networking", {}).get("ingress", {})
-            gateway_enabled = ingress_spec.get("enabled", False)
+        # Ingress exists — gateway is enabled. Read hostname from status.
+        hostname = None
+        try:
+            for lb in ing.status.load_balancer.ingress:
+                hostname = lb.hostname or lb.ip
+                if hostname:
+                    break
+        except (AttributeError, TypeError):
+            pass
 
-        gateway_url = None
-        if gateway_enabled:
-            try:
-                ingresses = await self._networking_v1.list_namespaced_ingress(
-                    namespace=namespace,
-                    label_selector=f"app.kubernetes.io/instance={agent_name}",
-                )
-                for ing in ingresses.items:
-                    for lb in (ing.status.load_balancer.ingress or []):
-                        if lb.hostname:
-                            gateway_url = f"http://{lb.hostname}"
-                            break
-                        if lb.ip:
-                            gateway_url = f"http://{lb.ip}"
-                            break
-                    if gateway_url:
-                        break
-            except client.exceptions.ApiException:
-                pass
-
-        return {"gateway_enabled": gateway_enabled, "gateway_url": gateway_url}
+        return {
+            "gateway_enabled": True,
+            "gateway_url": f"http://{hostname}" if hostname else None,
+        }
 
     # ─── Pod Status ───
 
