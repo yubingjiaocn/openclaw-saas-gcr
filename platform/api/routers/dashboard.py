@@ -107,13 +107,14 @@ async def get_tenant_dashboard(
     plan_limits = PLAN_LIMITS.get(tenant.plan, PLAN_LIMITS["free"])
 
     # Token usage this month
+    month_start = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     usage_result = await db.execute(text("""
         SELECT COALESCE(SUM(total_tokens), 0) as total_tokens,
                COALESCE(SUM(call_count), 0) as total_calls,
                COALESCE(SUM(estimated_cost), 0) as total_cost
         FROM daily_usage
-        WHERE tenant = :tenant AND date >= date_trunc('month', CURRENT_DATE)
-    """), {"tenant": tenant_name})
+        WHERE tenant = :tenant AND date >= :month_start
+    """), {"tenant": tenant_name, "month_start": month_start})
     usage_row = usage_result.first()
 
     billing_info = {
