@@ -389,6 +389,10 @@ class K8sClient:
             "auth": {
                 "mode": "none",
             },
+            "controlUi": {
+                "allowedOrigins": ["*"],
+                "dangerouslyAllowHostHeaderOriginFallback": True,
+            },
         }
 
         # 3) Build CRD body
