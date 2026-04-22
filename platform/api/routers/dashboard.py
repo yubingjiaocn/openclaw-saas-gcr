@@ -65,7 +65,7 @@ async def get_tenant_dashboard(
     )
     agents_list = []
     for a in agent_result.scalars().all():
-        gateway_url = await k8s_client.get_agent_gateway_url(tenant_name, a.name)
+        gw = await k8s_client.get_agent_gateway_info(tenant_name, a.name)
         agents_list.append({
             "id": a.id,
             "name": a.name,
@@ -74,7 +74,8 @@ async def get_tenant_dashboard(
             "status": a.status,
             "channels": a.channels or [],
             "created_at": a.created_at.isoformat() if a.created_at else None,
-            "gateway_url": gateway_url,
+            "gateway_enabled": gw["gateway_enabled"],
+            "gateway_url": gw["gateway_url"],
         })
 
     # --- Members ---

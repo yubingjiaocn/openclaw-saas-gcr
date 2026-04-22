@@ -361,7 +361,10 @@ function TenantPage() {
               </div>
             </div>
             <div style={{display:'flex', gap:'6px'}}>
-              {a.gateway_url && <a href={a.gateway_url} target="_blank" rel="noopener noreferrer" className="btn btn-sm btn-primary">🔗 Gateway</a>}
+              {a.gateway_enabled && (a.gateway_url
+                ? <a href={a.gateway_url} target="_blank" rel="noopener noreferrer" className="btn btn-sm btn-primary">🔗 Gateway</a>
+                : <button className="btn btn-sm" disabled style={{opacity:0.5, cursor:'not-allowed'}}>🔗 Gateway (provisioning...)</button>
+              )}
               <button className="btn btn-sm" onClick={() => setLogsModal({agentId: a.id, agentName: a.name})}>📋 Logs</button>
               {myRole && <button className="btn btn-sm" onClick={() => setChannelModal({agentId: a.id, agentName: a.name})}>+ Channel</button>}
               {myRole && <button className="btn btn-sm btn-danger" onClick={() => deleteAgent(a.id)}>Delete</button>}

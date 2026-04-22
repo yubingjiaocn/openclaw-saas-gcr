@@ -147,7 +147,7 @@ async def get_agent_status(
         crd_phase = instance.get("status", {}).get("phase", "Unknown") if instance else "NotFound"
         crd_ready = instance.get("status", {}).get("ready", False) if instance else False
 
-        gateway_url = await k8s_client.get_agent_gateway_url(tenant_name, agent.name)
+        gw = await k8s_client.get_agent_gateway_info(tenant_name, agent.name)
 
         return {
             "agent_id": agent.id,
@@ -157,7 +157,8 @@ async def get_agent_status(
             "crd_ready": crd_ready,
             "channels": agent.channels,
             "pod": pod_status,
-            "gateway_url": gateway_url,
+            "gateway_enabled": gw["gateway_enabled"],
+            "gateway_url": gw["gateway_url"],
         }
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to get status: {str(e)}")
