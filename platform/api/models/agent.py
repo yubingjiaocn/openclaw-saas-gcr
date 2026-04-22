@@ -175,6 +175,9 @@ class AgentCreate(BaseModel):
     enable_chromium: bool = Field(default=False, description="Enable Chromium browser sidecar for web automation")
     custom_image: Optional[str] = Field(default=None, description="Custom container image repository (e.g. public.ecr.aws/xxx/openclaw-custom)")
     custom_image_tag: Optional[str] = Field(default=None, description="Custom container image tag (e.g. 2026.3.21). Defaults to 'latest' if custom_image is set")
+    runtime_class_name: Optional[str] = Field(default=None, description="Kubernetes RuntimeClassName for the pod")
+    node_selector: Optional[Dict[str, str]] = Field(default=None, description="Kubernetes nodeSelector key-value pairs")
+    tolerations: Optional[List[Dict[str, str]]] = Field(default=None, description="Kubernetes tolerations list")
     config: Optional[Dict[str, Any]] = Field(default_factory=dict)
 
 

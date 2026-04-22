@@ -93,6 +93,9 @@ async def create_agent(
             enable_chromium=agent_data.enable_chromium,
             custom_image=agent_data.custom_image,
             custom_image_tag=agent_data.custom_image_tag,
+            runtime_class_name=agent_data.runtime_class_name,
+            node_selector=agent_data.node_selector,
+            tolerations=agent_data.tolerations,
         )
         agent.status = AgentStatus.RUNNING.value
         await db.commit()

@@ -210,6 +210,9 @@ class K8sClient:
         enable_chromium: bool = False,
         custom_image: Optional[str] = None,
         custom_image_tag: Optional[str] = None,
+        runtime_class_name: Optional[str] = None,
+        node_selector: Optional[Dict[str, str]] = None,
+        tolerations: Optional[list] = None,
     ) -> dict:
         """Create OpenClawInstance CRD + agent-keys secret."""
         from api.models.agent import LLM_PROVIDERS
@@ -436,6 +439,11 @@ class K8sClient:
                     "requests": {"cpu": "500m", "memory": "2Gi"},
                     "limits": {"cpu": "2", "memory": "4Gi"},
                 },
+                **({"availability": {
+                    **({"runtimeClassName": runtime_class_name} if runtime_class_name else {}),
+                    **({"nodeSelector": node_selector} if node_selector else {}),
+                    **({"tolerations": tolerations} if tolerations else {}),
+                }} if any([runtime_class_name, node_selector, tolerations]) else {}),
                 # Metrics exporter sidecar - reads JSONL from shared PVC
                 "sidecars": [
                     {

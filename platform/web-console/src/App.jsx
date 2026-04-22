@@ -502,6 +502,9 @@ function CreateAgentModal({ tenantName, onClose, onSuccess, onError }) {
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [customImage, setCustomImage] = useState('')
   const [customImageTag, setCustomImageTag] = useState('')
+  const [runtimeClassName, setRuntimeClassName] = useState('')
+  const [nodeSelector, setNodeSelector] = useState('')
+  const [tolerations, setTolerations] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
@@ -525,6 +528,13 @@ function CreateAgentModal({ tenantName, onClose, onSuccess, onError }) {
     e.preventDefault()
     setError(''); setSubmitting(true)
     try {
+      const parsedNodeSelector = nodeSelector.trim() ? Object.fromEntries(
+        nodeSelector.split(',').map(s => s.trim().split('=').map(v => v.trim())).filter(([k]) => k)
+      ) : undefined
+      const parsedTolerations = tolerations.trim() ? tolerations.split('\n').map(line => {
+        const parts = Object.fromEntries(line.split(',').map(s => s.trim().split('=').map(v => v.trim())).filter(([k]) => k))
+        return parts
+      }).filter(t => Object.keys(t).length) : undefined
       await api.createAgent(tenantName, name.trim(), {
         llmProvider: provider,
         llmModel: model || undefined,
@@ -532,6 +542,9 @@ function CreateAgentModal({ tenantName, onClose, onSuccess, onError }) {
         enableChromium,
         customImage: customImage.trim() || undefined,
         customImageTag: customImageTag.trim() || undefined,
+        runtimeClassName: runtimeClassName.trim() || undefined,
+        nodeSelector: parsedNodeSelector,
+        tolerations: parsedTolerations,
       })
       onSuccess('Agent created! Pod is starting...')
     } catch (err) {
@@ -650,6 +663,27 @@ function CreateAgentModal({ tenantName, onClose, onSuccess, onError }) {
                   <label style={{fontSize:'12px'}}>Image Tag</label>
                   <input className="form-input" value={customImageTag} onChange={e => setCustomImageTag(e.target.value)}
                     placeholder="e.g. 2026.3.21 (default: latest)" />
+                </div>
+
+                <hr style={{border:'none', borderTop:'1px solid var(--border-color)', margin:'12px 0'}} />
+                <p style={{fontSize:'12px', color:'var(--text-secondary)', marginBottom:'8px'}}>
+                  <strong>Scheduling</strong> — control pod placement on specific nodes.
+                </p>
+                <div className="form-group" style={{marginBottom:'8px'}}>
+                  <label style={{fontSize:'12px'}}>RuntimeClassName</label>
+                  <input className="form-input" value={runtimeClassName} onChange={e => setRuntimeClassName(e.target.value)}
+                    placeholder="e.g. kata, gvisor" />
+                </div>
+                <div className="form-group" style={{marginBottom:'8px'}}>
+                  <label style={{fontSize:'12px'}}>Node Selector <span style={{color:'var(--text-secondary)'}}>(comma-separated key=value)</span></label>
+                  <input className="form-input" value={nodeSelector} onChange={e => setNodeSelector(e.target.value)}
+                    placeholder="e.g. kubernetes.io/arch=arm64, node.kubernetes.io/instance-type=m7g.xlarge" />
+                </div>
+                <div className="form-group" style={{marginBottom:'0'}}>
+                  <label style={{fontSize:'12px'}}>Tolerations <span style={{color:'var(--text-secondary)'}}>(one per line: key=mykey,operator=Equal,value=myval,effect=NoSchedule)</span></label>
+                  <textarea className="form-input" value={tolerations} onChange={e => setTolerations(e.target.value)}
+                    placeholder={"key=dedicated,operator=Equal,value=agents,effect=NoSchedule"}
+                    rows={3} style={{resize:'vertical', fontFamily:'monospace', fontSize:'12px'}} />
                 </div>
               </div>
             )}
