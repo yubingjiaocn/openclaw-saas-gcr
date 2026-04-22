@@ -27,7 +27,7 @@ function Navbar({ auth }) {
       <div className="navbar-right">
         {auth.isLoggedIn && (
           <>
-            {api.isPlatformAdmin() && <span className="badge badge-purple" style={{fontSize:'11px'}}>Platform Admin</span>}
+            {api.isPlatformAdmin() && <span className="badge badge-purple" style={{fontSize:'0.6875rem'}}>Platform Admin</span>}
             <Link to="/">Dashboard</Link>
             <Link to="/plans">Plans</Link>
             <button className="btn btn-sm" onClick={auth.logout}>Logout</button>
@@ -75,7 +75,7 @@ function LoginPage({ onLogin }) {
             </div>
             <button className="btn btn-primary" style={{width:'100%'}}>Sign In</button>
           </form>
-          <p style={{textAlign:'center', marginTop:'16px', fontSize:'14px'}}>
+          <p style={{textAlign:'center', marginTop:'16px', fontSize:'0.875rem'}}>
             Don't have an account? <Link to="/signup">Sign Up</Link>
           </p>
         </div>
@@ -127,7 +127,7 @@ function SignupPage({ onLogin }) {
             </div>
             <button className="btn btn-primary" style={{width:'100%'}}>Create Account</button>
           </form>
-          <p style={{textAlign:'center', marginTop:'16px', fontSize:'14px'}}>
+          <p style={{textAlign:'center', marginTop:'16px', fontSize:'0.875rem'}}>
             Already have an account? <Link to="/login">Sign In</Link>
           </p>
         </div>
@@ -254,7 +254,7 @@ function DashboardPage() {
             <div style={{display:'flex', gap:'8px', alignItems:'center'}}>
               <Link to={`/tenants/${t.name}/billing`} className="btn btn-sm">📊 Billing</Link>
               {isAdmin && <button className="btn btn-sm btn-danger" onClick={() => deleteTenantFromList(t.name)}>🗑</button>}
-              <span style={{color:'var(--text-secondary)', fontSize:'12px'}}>
+              <span style={{color:'var(--text-secondary)', fontSize:'0.75rem'}}>
                 Created: {new Date(t.created_at).toLocaleDateString()}
               </span>
             </div>
@@ -327,7 +327,7 @@ function TenantPage() {
   return (
     <div className="container">
       <div className="page-header">
-        <h1>Tenant: {tenantName} {myRole && <span className={`badge ${myRole === 'owner' ? 'badge-purple' : myRole === 'admin' ? 'badge-green' : 'badge-blue'}`} style={{fontSize:'12px',verticalAlign:'middle'}}>{myRole}</span>}</h1>
+        <h1>Tenant: {tenantName} {myRole && <span className={`badge ${myRole === 'owner' ? 'badge-purple' : myRole === 'admin' ? 'badge-green' : 'badge-blue'}`} style={{fontSize:'0.75rem',verticalAlign:'middle'}}>{myRole}</span>}</h1>
         <p>
           <Link to="/">← Back to Dashboard</Link>
           {' · '}
@@ -355,7 +355,7 @@ function TenantPage() {
               <span className="agent-name">{a.name}</span>
               <span className={`badge ${a.status === 'running' ? 'badge-green' : 'badge-orange'}`}>{a.status}</span>
               <span className="badge badge-blue">{a.llm_provider || 'bedrock-irsa'}</span>
-              {a.llm_model && <span style={{color:'var(--text-secondary)', fontSize:'11px'}}>{a.llm_model}</span>}
+              {a.llm_model && <span style={{color:'var(--text-secondary)', fontSize:'0.6875rem'}}>{a.llm_model}</span>}
               <div className="agent-channels">
                 {(a.channels || []).map(ch => <span key={ch} className="channel-chip">{ch}</span>)}
               </div>
@@ -378,7 +378,7 @@ function TenantPage() {
           <span className="card-title">Members</span>
         </div>
         {members.length === 0 ? (
-          <p style={{ padding: '12px 16px', color: 'var(--text-secondary)', fontSize: '13px' }}>No members yet.</p>
+          <p style={{ padding: '12px 16px', color: 'var(--text-secondary)', fontSize: '0.8125rem' }}>No members yet.</p>
         ) : (
           <div className="usage-table">
             <div className="usage-row usage-header"><span>Email</span><span>Name</span><span>Role</span><span>Joined</span><span></span></div>
@@ -387,7 +387,7 @@ function TenantPage() {
                 <span>{m.email}</span>
                 <span>{m.display_name || '—'}</span>
                 <span className={`badge ${m.role === 'owner' ? 'badge-blue' : m.role === 'admin' ? 'badge-green' : ''}`}>{m.role}</span>
-                <span style={{fontSize:'12px', color:'var(--text-secondary)'}}>{new Date(m.joined_at).toLocaleDateString()}</span>
+                <span style={{fontSize:'0.75rem', color:'var(--text-secondary)'}}>{new Date(m.joined_at).toLocaleDateString()}</span>
                 <span>{m.role !== 'owner' && isOwnerOrAdmin && <button className="btn btn-sm btn-danger" onClick={async () => {
                   if (!confirm(`Remove ${m.email} from this tenant?`)) return
                   try { await api.removeMember(tenantName, m.user_id); reload() } catch (err) { setError(err.message) }
@@ -473,7 +473,7 @@ function AllowedEmailsCard({ tenantName, initialEmails }) {
         <button className="btn btn-primary btn-sm" type="submit">Add</button>
       </form>
       {loading ? <p style={{ padding: '12px 16px' }}>Loading...</p> : emails.length === 0 ? (
-        <p style={{ padding: '12px 16px', color: 'var(--text-secondary)', fontSize: '13px' }}>No emails added. Add emails to allow users to sign up for this tenant.</p>
+        <p style={{ padding: '12px 16px', color: 'var(--text-secondary)', fontSize: '0.8125rem' }}>No emails added. Add emails to allow users to sign up for this tenant.</p>
       ) : (
         <div className="usage-table">
           <div className="usage-row usage-header"><span>Email</span><span>Role</span><span>Status</span><span></span></div>
@@ -586,24 +586,24 @@ function CreateAgentModal({ tenantName, onClose, onSuccess, onError }) {
 
           {currentProvider?.required_keys?.length > 0 && provider !== 'openai-compatible' && (
             <div style={{background:'var(--bg-secondary)', padding:'12px', borderRadius:'8px', marginBottom:'12px'}}>
-              <p style={{fontSize:'13px', color:'var(--text-secondary)', marginBottom:'8px'}}>
+              <p style={{fontSize:'0.8125rem', color:'var(--text-secondary)', marginBottom:'8px'}}>
                 🔑 API Keys required for {currentProvider.name}
               </p>
               {currentProvider.required_keys.filter(k => k !== 'CUSTOM_BASE_URL' && k !== 'CUSTOM_MODEL_ID').map(key => (
                 <div className="form-group" key={key} style={{marginBottom:'8px'}}>
-                  <label style={{fontSize:'12px'}}>{key}</label>
+                  <label style={{fontSize:'0.75rem'}}>{key}</label>
                   <input className="form-input" type="password" placeholder={key}
                     value={apiKeys[key] || ''} onChange={e => setApiKeys({...apiKeys, [key]: e.target.value})} required />
                 </div>
               ))}
               {currentProvider?.optional_keys?.length > 0 && (
                 <>
-                  <p style={{fontSize:'12px', color:'var(--text-secondary)', marginTop:'8px', marginBottom:'4px'}}>
+                  <p style={{fontSize:'0.75rem', color:'var(--text-secondary)', marginTop:'8px', marginBottom:'4px'}}>
                     Optional settings:
                   </p>
                   {currentProvider.optional_keys.map(key => (
                     <div className="form-group" key={key} style={{marginBottom:'8px'}}>
-                      <label style={{fontSize:'12px'}}>{key} <span style={{color:'var(--text-secondary)'}}>(optional)</span></label>
+                      <label style={{fontSize:'0.75rem'}}>{key} <span style={{color:'var(--text-secondary)'}}>(optional)</span></label>
                       <input className="form-input" placeholder={key === 'AWS_DEFAULT_REGION' ? 'us-west-2' : key}
                         value={apiKeys[key] || ''} onChange={e => setApiKeys({...apiKeys, [key]: e.target.value})} />
                     </div>
@@ -615,21 +615,21 @@ function CreateAgentModal({ tenantName, onClose, onSuccess, onError }) {
 
           {provider === 'openai-compatible' && (
             <div style={{background:'var(--bg-secondary)', padding:'12px', borderRadius:'8px', marginBottom:'12px'}}>
-              <p style={{fontSize:'13px', color:'var(--text-secondary)', marginBottom:'8px'}}>
+              <p style={{fontSize:'0.8125rem', color:'var(--text-secondary)', marginBottom:'8px'}}>
                 🌐 OpenAI-Compatible Endpoint
               </p>
               <div className="form-group" style={{marginBottom:'8px'}}>
-                <label style={{fontSize:'12px'}}>API Base URL</label>
+                <label style={{fontSize:'0.75rem'}}>API Base URL</label>
                 <input className="form-input" placeholder="https://api.example.com/v1"
                   value={apiKeys['CUSTOM_BASE_URL'] || ''} onChange={e => setApiKeys({...apiKeys, CUSTOM_BASE_URL: e.target.value})} required />
               </div>
               <div className="form-group" style={{marginBottom:'8px'}}>
-                <label style={{fontSize:'12px'}}>API Key</label>
+                <label style={{fontSize:'0.75rem'}}>API Key</label>
                 <input className="form-input" type="password" placeholder="sk-..."
                   value={apiKeys['CUSTOM_API_KEY'] || ''} onChange={e => setApiKeys({...apiKeys, CUSTOM_API_KEY: e.target.value})} required />
               </div>
               <div className="form-group" style={{marginBottom:'8px'}}>
-                <label style={{fontSize:'12px'}}>Model ID</label>
+                <label style={{fontSize:'0.75rem'}}>Model ID</label>
                 <input className="form-input" placeholder="gpt-4o, deepseek-chat, qwen-plus..."
                   value={apiKeys['CUSTOM_MODEL_ID'] || ''} onChange={e => setApiKeys({...apiKeys, CUSTOM_MODEL_ID: e.target.value})} required />
               </div>
@@ -637,7 +637,7 @@ function CreateAgentModal({ tenantName, onClose, onSuccess, onError }) {
           )}
 
           <div style={{background:'var(--bg-secondary)', padding:'12px', borderRadius:'8px', marginBottom:'12px'}}>
-            <label style={{display:'flex', alignItems:'center', gap:'8px', cursor:'pointer', fontSize:'13px'}}>
+            <label style={{display:'flex', alignItems:'center', gap:'8px', cursor:'pointer', fontSize:'0.8125rem'}}>
               <input type="checkbox" checked={enableChromium} onChange={e => setEnableChromium(e.target.checked)} />
               <span>🌐 <strong>Enable Browser</strong> — adds Chromium sidecar for web automation (+500m CPU, +1Gi mem)</span>
             </label>
@@ -645,45 +645,45 @@ function CreateAgentModal({ tenantName, onClose, onSuccess, onError }) {
 
           <div style={{marginBottom:'12px'}}>
             <button type="button" className="btn btn-sm" onClick={() => setShowAdvanced(!showAdvanced)}
-              style={{fontSize:'12px', color:'var(--text-secondary)'}}>
+              style={{fontSize:'0.75rem', color:'var(--text-secondary)'}}>
               {showAdvanced ? '▼' : '▶'} Advanced Options
             </button>
             {showAdvanced && (
               <div style={{background:'var(--bg-secondary)', padding:'12px', borderRadius:'8px', marginTop:'8px'}}>
-                <p style={{fontSize:'12px', color:'var(--text-secondary)', marginBottom:'8px'}}>
+                <p style={{fontSize:'0.75rem', color:'var(--text-secondary)', marginBottom:'8px'}}>
                   🐳 <strong>Custom Container Image</strong> — use a custom-built OpenClaw image with pre-installed tools.
                   Leave empty to use the platform default.
                 </p>
                 <div className="form-group" style={{marginBottom:'8px'}}>
-                  <label style={{fontSize:'12px'}}>Image Repository</label>
+                  <label style={{fontSize:'0.75rem'}}>Image Repository</label>
                   <input className="form-input" value={customImage} onChange={e => setCustomImage(e.target.value)}
                     placeholder="e.g. public.ecr.aws/xxx/openclaw-custom" />
                 </div>
                 <div className="form-group" style={{marginBottom:'0'}}>
-                  <label style={{fontSize:'12px'}}>Image Tag</label>
+                  <label style={{fontSize:'0.75rem'}}>Image Tag</label>
                   <input className="form-input" value={customImageTag} onChange={e => setCustomImageTag(e.target.value)}
                     placeholder="e.g. 2026.3.21 (default: latest)" />
                 </div>
 
                 <hr style={{border:'none', borderTop:'1px solid var(--border-color)', margin:'12px 0'}} />
-                <p style={{fontSize:'12px', color:'var(--text-secondary)', marginBottom:'8px'}}>
+                <p style={{fontSize:'0.75rem', color:'var(--text-secondary)', marginBottom:'8px'}}>
                   <strong>Scheduling</strong> — control pod placement on specific nodes.
                 </p>
                 <div className="form-group" style={{marginBottom:'8px'}}>
-                  <label style={{fontSize:'12px'}}>RuntimeClassName</label>
+                  <label style={{fontSize:'0.75rem'}}>RuntimeClassName</label>
                   <input className="form-input" value={runtimeClassName} onChange={e => setRuntimeClassName(e.target.value)}
                     placeholder="e.g. kata, gvisor" />
                 </div>
                 <div className="form-group" style={{marginBottom:'8px'}}>
-                  <label style={{fontSize:'12px'}}>Node Selector <span style={{color:'var(--text-secondary)'}}>(comma-separated key=value)</span></label>
+                  <label style={{fontSize:'0.75rem'}}>Node Selector <span style={{color:'var(--text-secondary)'}}>(comma-separated key=value)</span></label>
                   <input className="form-input" value={nodeSelector} onChange={e => setNodeSelector(e.target.value)}
                     placeholder="e.g. kubernetes.io/arch=arm64, node.kubernetes.io/instance-type=m7g.xlarge" />
                 </div>
                 <div className="form-group" style={{marginBottom:'0'}}>
-                  <label style={{fontSize:'12px'}}>Tolerations <span style={{color:'var(--text-secondary)'}}>(one per line: key=mykey,operator=Equal,value=myval,effect=NoSchedule)</span></label>
+                  <label style={{fontSize:'0.75rem'}}>Tolerations <span style={{color:'var(--text-secondary)'}}>(one per line: key=mykey,operator=Equal,value=myval,effect=NoSchedule)</span></label>
                   <textarea className="form-input" value={tolerations} onChange={e => setTolerations(e.target.value)}
                     placeholder={"key=dedicated,operator=Equal,value=agents,effect=NoSchedule"}
-                    rows={3} style={{resize:'vertical', fontFamily:'monospace', fontSize:'12px'}} />
+                    rows={3} style={{resize:'vertical', fontFamily:'monospace', fontSize:'0.75rem'}} />
                 </div>
               </div>
             )}
@@ -831,7 +831,7 @@ function LogsModal({ tenantName, agentId, agentName, onClose }) {
               <option value={500}>500 lines</option>
               <option value={1000}>1000 lines</option>
             </select>
-            <label style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+            <label style={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
               <input type="checkbox" checked={autoRefresh} onChange={e => setAutoRefresh(e.target.checked)} />
               Auto
             </label>
@@ -904,7 +904,7 @@ function BillingPage() {
               <span className={`badge ${billing.current_plan === 'free' ? 'badge-orange' : 'badge-green'}`}>
                 {billing.current_plan.toUpperCase()}
               </span>
-              <Link to="/plans" style={{ fontSize: 12 }}>Compare Plans →</Link>
+              <Link to="/plans" style={{ fontSize: '0.75rem' }}>Compare Plans →</Link>
             </div>
           </div>
           <div className="billing-stats">
@@ -1003,7 +1003,7 @@ function BillingPage() {
                     </div>
                     {expandedAgent === a.agent_name && (
                       <div className="agent-detail" style={{ padding: '10px 16px', background: 'var(--bg-secondary)', borderRadius: '0 0 8px 8px', marginBottom: '4px' }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', fontSize: '13px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', fontSize: '0.8125rem' }}>
                           <div><span style={{ color: 'var(--text-secondary)' }}>Input: </span><strong>{fmtTokens(a.input_tokens)}</strong></div>
                           <div><span style={{ color: 'var(--text-secondary)' }}>Output: </span><strong>{fmtTokens(a.output_tokens)}</strong></div>
                           <div><span style={{ color: 'var(--text-secondary)' }}>Total: </span><strong>{fmtTokens(a.total_tokens)}</strong></div>
@@ -1038,7 +1038,7 @@ function BillingPage() {
                 </div>
                 {usage.by_model.map(m => (
                   <div key={m.model} className="usage-row">
-                    <span style={{ fontSize: '12px' }}>{m.model}</span>
+                    <span style={{ fontSize: '0.75rem' }}>{m.model}</span>
                     <span>{fmtTokens(m.total_tokens)}</span>
                     <span>{m.call_count}</span>
                     <span>{fmtCost(m.estimated_cost)}</span>
@@ -1190,25 +1190,25 @@ function PlansPage() {
               <div style={{
                 position: 'absolute', top: '-12px', left: '50%', transform: 'translateX(-50%)',
                 background: plan.color, color: '#fff', padding: '2px 12px',
-                borderRadius: '10px', fontSize: '11px', fontWeight: 600, whiteSpace: 'nowrap',
+                borderRadius: '10px', fontSize: '0.6875rem', fontWeight: 600, whiteSpace: 'nowrap',
               }}>{plan.badge}</div>
             )}
             <div style={{ textAlign: 'center', paddingTop: plan.badge ? 8 : 0 }}>
-              <div style={{ fontSize: '14px', fontWeight: 600, color: plan.color, textTransform: 'uppercase', letterSpacing: 1 }}>
+              <div style={{ fontSize: '0.875rem', fontWeight: 600, color: plan.color, textTransform: 'uppercase', letterSpacing: 1 }}>
                 {plan.name}
               </div>
-              <div style={{ fontSize: '36px', fontWeight: 700, margin: '8px 0 0' }}>
+              <div style={{ fontSize: '2.25rem', fontWeight: 700, margin: '8px 0 0' }}>
                 {plan.price}
               </div>
-              <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: 12 }}>
+              <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', marginBottom: 12 }}>
                 {plan.priceSub}
               </div>
-              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', minHeight: 40 }}>
+              <p style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', minHeight: 40 }}>
                 {plan.description}
               </p>
             </div>
             <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12, marginTop: 'auto' }}>
-              <div style={{ fontSize: '13px' }}>
+              <div style={{ fontSize: '0.8125rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
                   <span style={{ color: 'var(--text-secondary)' }}>Agents</span>
                   <strong>{plan.limits.agents}</strong>
@@ -1241,7 +1241,7 @@ function PlansPage() {
           <span className="card-title">📋 Detailed Plan Comparison</span>
         </div>
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
             <thead>
               <tr style={{ borderBottom: '2px solid var(--border)' }}>
                 <th style={{ textAlign: 'left', padding: '10px 12px', color: 'var(--text-secondary)', fontWeight: 600 }}>Feature</th>
@@ -1268,9 +1268,9 @@ function PlansPage() {
         </div>
       </div>
 
-      <div style={{ textAlign: 'center', marginTop: 16, color: 'var(--text-secondary)', fontSize: 13 }}>
+      <div style={{ textAlign: 'center', marginTop: 16, color: 'var(--text-secondary)', fontSize: '0.8125rem' }}>
         <p>💡 Token counting is enabled on all plans but currently <strong>not enforced</strong> — you won't be cut off if you exceed the limit.</p>
-        <p style={{ marginTop: 4, fontSize: 12 }}>
+        <p style={{ marginTop: 4, fontSize: '0.75rem' }}>
           Each agent runs as a dedicated pod with its own CPU, memory, and 50Gi persistent storage.
           Total CPU/Memory quota is the cluster-wide limit for all your agents combined.
         </p>
