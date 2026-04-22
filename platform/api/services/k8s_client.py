@@ -208,6 +208,7 @@ class K8sClient:
         llm_api_keys: Optional[Dict[str, str]] = None,
         channel_config: Optional[Dict] = None,
         enable_chromium: bool = False,
+        enable_gateway: bool = False,
         custom_image: Optional[str] = None,
         custom_image_tag: Optional[str] = None,
         runtime_class_name: Optional[str] = None,
@@ -448,6 +449,24 @@ class K8sClient:
                     **({"nodeSelector": node_selector} if node_selector else {}),
                     **({"tolerations": tolerations} if tolerations else {}),
                 }} if any([runtime_class_name, node_selector, tolerations]) else {}),
+                **({"networking": {
+                    "ingress": {
+                        "enabled": True,
+                        "className": "alb",
+                        "annotations": {
+                            "alb.ingress.kubernetes.io/scheme": "internet-facing",
+                            "alb.ingress.kubernetes.io/target-type": "ip",
+                            "alb.ingress.kubernetes.io/healthcheck-path": "/healthz",
+                            "alb.ingress.kubernetes.io/healthcheck-protocol": "HTTP",
+                        },
+                        "hosts": [{"host": "", "paths": [{"path": "/", "pathType": "Prefix"}]}],
+                        "security": {
+                            "forceHTTPS": False,
+                            "enableHSTS": False,
+                            "rateLimiting": {"enabled": False},
+                        },
+                    },
+                }} if enable_gateway else {}),
                 # Metrics exporter sidecar - reads JSONL from shared PVC
                 "sidecars": [
                     {
@@ -547,6 +566,25 @@ class K8sClient:
         # Also delete the keys secret
         await self.delete_secret(tenant_name, f"{agent_name}-keys")
         return {"status": "deleted", "name": agent_name}
+
+    async def get_agent_gateway_url(self, tenant_name: str, agent_name: str) -> Optional[str]:
+        """Get the ALB ingress URL for an agent's gateway, if exposed."""
+        await self.initialize()
+        namespace = f"tenant-{tenant_name}"
+        try:
+            ingresses = await self._networking_v1.list_namespaced_ingress(
+                namespace=namespace,
+                label_selector=f"app.kubernetes.io/instance={agent_name}",
+            )
+            for ing in ingresses.items:
+                for lb in (ing.status.load_balancer.ingress or []):
+                    if lb.hostname:
+                        return f"http://{lb.hostname}"
+                    if lb.ip:
+                        return f"http://{lb.ip}"
+        except client.exceptions.ApiException:
+            pass
+        return None
 
     # ─── Pod Status ───
 

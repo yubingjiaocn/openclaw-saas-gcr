@@ -96,8 +96,8 @@ class ApiClient {
 
   // Agents
   listAgents(tenant) { return this.request(`/api/v1/tenants/${tenant}/agents`) }
-  createAgent(tenant, name, { llmProvider = 'bedrock-irsa', llmModel = null, llmApiKeys = null, enableChromium = false, customImage = null, customImageTag = null, runtimeClassName = null, nodeSelector = null, tolerations = null } = {}) {
-    const body = { name, llm_provider: llmProvider, enable_chromium: enableChromium }
+  createAgent(tenant, name, { llmProvider = 'bedrock-irsa', llmModel = null, llmApiKeys = null, enableChromium = false, enableGateway = false, customImage = null, customImageTag = null, runtimeClassName = null, nodeSelector = null, tolerations = null } = {}) {
+    const body = { name, llm_provider: llmProvider, enable_chromium: enableChromium, enable_gateway: enableGateway }
     if (llmModel) body.llm_model = llmModel
     if (llmApiKeys && Object.keys(llmApiKeys).length) body.llm_api_keys = llmApiKeys
     if (customImage) body.custom_image = customImage

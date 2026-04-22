@@ -361,6 +361,7 @@ function TenantPage() {
               </div>
             </div>
             <div style={{display:'flex', gap:'6px'}}>
+              {a.gateway_url && <a href={a.gateway_url} target="_blank" rel="noopener noreferrer" className="btn btn-sm btn-primary">🔗 Gateway</a>}
               <button className="btn btn-sm" onClick={() => setLogsModal({agentId: a.id, agentName: a.name})}>📋 Logs</button>
               {myRole && <button className="btn btn-sm" onClick={() => setChannelModal({agentId: a.id, agentName: a.name})}>+ Channel</button>}
               {myRole && <button className="btn btn-sm btn-danger" onClick={() => deleteAgent(a.id)}>Delete</button>}
@@ -499,6 +500,7 @@ function CreateAgentModal({ tenantName, onClose, onSuccess, onError }) {
   const [model, setModel] = useState('')
   const [apiKeys, setApiKeys] = useState({})
   const [enableChromium, setEnableChromium] = useState(false)
+  const [enableGateway, setEnableGateway] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [customImage, setCustomImage] = useState('')
   const [customImageTag, setCustomImageTag] = useState('')
@@ -540,6 +542,7 @@ function CreateAgentModal({ tenantName, onClose, onSuccess, onError }) {
         llmModel: model || undefined,
         llmApiKeys: Object.keys(apiKeys).length ? apiKeys : undefined,
         enableChromium,
+        enableGateway,
         customImage: customImage.trim() || undefined,
         customImageTag: customImageTag.trim() || undefined,
         runtimeClassName: runtimeClassName.trim() || undefined,
@@ -636,10 +639,14 @@ function CreateAgentModal({ tenantName, onClose, onSuccess, onError }) {
             </div>
           )}
 
-          <div style={{background:'var(--bg-secondary)', padding:'12px', borderRadius:'8px', marginBottom:'12px'}}>
+          <div style={{background:'var(--bg-secondary)', padding:'12px', borderRadius:'8px', marginBottom:'12px', display:'flex', flexDirection:'column', gap:'10px'}}>
             <label style={{display:'flex', alignItems:'center', gap:'8px', cursor:'pointer', fontSize:'0.8125rem'}}>
               <input type="checkbox" checked={enableChromium} onChange={e => setEnableChromium(e.target.checked)} />
               <span>🌐 <strong>Enable Browser</strong> — adds Chromium sidecar for web automation (+500m CPU, +1Gi mem)</span>
+            </label>
+            <label style={{display:'flex', alignItems:'center', gap:'8px', cursor:'pointer', fontSize:'0.8125rem'}}>
+              <input type="checkbox" checked={enableGateway} onChange={e => setEnableGateway(e.target.checked)} />
+              <span>🔗 <strong>Expose Gateway</strong> — create an internet-facing ALB to access the agent's web UI</span>
             </label>
           </div>
 
