@@ -308,6 +308,14 @@ function TenantPage() {
     }).catch(e => setError(e.message)).finally(() => setLoading(false))
   }, [])
 
+  // Auto-refresh when any agent has gateway enabled but URL not yet ready
+  useEffect(() => {
+    const hasPending = agents.some(a => a.gateway_enabled && !a.gateway_url)
+    if (!hasPending) return
+    const interval = setInterval(reload, 10000)
+    return () => clearInterval(interval)
+  }, [agents])
+
   const deleteAgent = async (id) => {
     if (!confirm('Delete this agent? This will stop the pod.')) return
     try {
