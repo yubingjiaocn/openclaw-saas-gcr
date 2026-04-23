@@ -431,6 +431,14 @@ class K8sClient:
                     "containerSecurityContext": {
                         "readOnlyRootFilesystem": False,
                     },
+                    # IRSA: annotate managed SA so pods get Bedrock credentials
+                    **({
+                        "rbac": {
+                            "serviceAccountAnnotations": {
+                                "eks.amazonaws.com/role-arn": settings.BEDROCK_ROLE_ARN,
+                            },
+                        },
+                    } if llm_provider in ("bedrock", "bedrock-irsa") and settings.BEDROCK_ROLE_ARN else {}),
                 },
                 "resources": {
                     "requests": {"cpu": "500m", "memory": "2Gi"},
@@ -498,29 +506,6 @@ class K8sClient:
                 plural=self.CRD_PLURAL,
                 body=body,
             )
-
-            # Operator creates the SA asynchronously. Wait briefly then annotate
-            # with IRSA role so the pod gets Bedrock credentials.
-            if llm_provider in ("bedrock", "bedrock-irsa") and settings.BEDROCK_ROLE_ARN:
-                import asyncio
-                for attempt in range(12):  # up to 30s
-                    await asyncio.sleep(2.5)
-                    try:
-                        sa = await self._core_v1.read_namespaced_service_account(
-                            name=agent_name, namespace=namespace
-                        )
-                        sa.metadata.annotations = sa.metadata.annotations or {}
-                        sa.metadata.annotations["eks.amazonaws.com/role-arn"] = settings.BEDROCK_ROLE_ARN
-                        await self._core_v1.patch_namespaced_service_account(
-                            name=agent_name, namespace=namespace, body=sa
-                        )
-                        logger.info(f"IRSA annotation added to SA {agent_name} in {namespace}")
-                        break
-                    except client.exceptions.ApiException as sa_err:
-                        if sa_err.status == 404 and attempt < 11:
-                            continue
-                        logger.warning(f"Failed to annotate SA {agent_name}: {sa_err}")
-                        break
 
             return {"status": "created", "name": agent_name}
         except client.exceptions.ApiException as e:

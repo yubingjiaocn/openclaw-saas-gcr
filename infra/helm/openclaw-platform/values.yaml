@@ -5,7 +5,7 @@ image:
   pullPolicy: Always
   platform:
     repository: openclaw-saas-platform
-    tag: "v0.9.61"
+    tag: "v0.9.62"
   billingConsumer:
     repository: openclaw-saas-billing-consumer
     tag: "v0.1.0"
