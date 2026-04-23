@@ -244,21 +244,13 @@ class K8sClient:
             non_secret_keys = {"CUSTOM_BASE_URL", "CUSTOM_MODEL_ID", "AWS_DEFAULT_REGION"}
             secret_data = {k: v for k, v in llm_api_keys.items() if k not in non_secret_keys}
 
-        # bedrock-irsa: obtain temporary credentials from instance metadata / node role
+        # bedrock-irsa: use IRSA (ServiceAccount annotation) for pod-level Bedrock access.
+        # The SA annotation is added to the CRD body below; no temporary credentials needed.
         if llm_provider == "bedrock-irsa":
-            import boto3
-            try:
-                session = boto3.Session()
-                credentials = session.get_credentials().get_frozen_credentials()
-                secret_data["AWS_ACCESS_KEY_ID"] = credentials.access_key
-                secret_data["AWS_SECRET_ACCESS_KEY"] = credentials.secret_key
-                if credentials.token:
-                    secret_data["AWS_SESSION_TOKEN"] = credentials.token
-                secret_data["AWS_DEFAULT_REGION"] = settings.AWS_REGION
-                logger.info(f"bedrock-irsa: injected temporary AWS credentials for {agent_name}")
-            except Exception as e:
-                logger.error(f"bedrock-irsa: failed to obtain AWS credentials: {e}")
-                raise ValueError(f"Failed to obtain AWS credentials for bedrock-irsa: {e}")
+            if not settings.BEDROCK_ROLE_ARN:
+                raise ValueError("BEDROCK_ROLE_ARN not configured. Set it in platform environment.")
+            secret_data["AWS_DEFAULT_REGION"] = settings.AWS_REGION
+            logger.info(f"bedrock-irsa: will use IRSA role {settings.BEDROCK_ROLE_ARN} for {agent_name}")
 
         await self.create_secret(tenant_name, f"{agent_name}-keys", secret_data)
 
@@ -411,6 +403,14 @@ class K8sClient:
                 },
             },
             "spec": {
+                # IRSA: annotate tenant SA so pods get Bedrock credentials via OIDC
+                **({
+                    "serviceAccount": {
+                        "annotations": {
+                            "eks.amazonaws.com/role-arn": settings.BEDROCK_ROLE_ARN,
+                        },
+                    },
+                } if llm_provider in ("bedrock", "bedrock-irsa") and settings.BEDROCK_ROLE_ARN else {}),
                 **({
                     "image": {
                         "repository": effective_image,

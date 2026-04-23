@@ -51,6 +51,7 @@ config:
   awsRegion: ""         # auto-detected from node if empty
   awsPartition: aws
   awsAccountId: ""
+  bedrockRoleArn: ""    # IRSA role ARN for tenant Bedrock access
 
 resources:
   api:
